@@ -1,30 +1,15 @@
-#!/usr/bin/env bash
-#encoding=utf8
+#!/bin/bash
 
-function echo_block() {
-    echo "----------------------------"
-    echo $1
-    echo "----------------------------"
-}
+# conda create --name freqtrade_ray1 --clone freqtrade_ray
 
-function check_installed_pip() {
-   ${PYTHON} -m pip > /dev/null
-   if [ $? -ne 0 ]; then
-        echo_block "Installing Pip for ${PYTHON}"
-        curl https://bootstrap.pypa.io/get-pip.py -s -o get-pip.py
-        ${PYTHON} get-pip.py
-        rm get-pip.py
-   fi
-}
+pip install -r requirements.txt
+pip install -r requirements-plot.txt
+pip install -r requirements-hyperopt.txt
+pip install -r requirements-freqai.txt
+pip install -r requirements-freqai-rl.txt
 
-# Check which python version is installed
-function check_installed_python() {
-    if [ -n "${VIRTUAL_ENV}" ]; then
-        echo "Please deactivate your virtual environment before running setup.sh."
-        echo "You can do this by running 'deactivate'."
-        exit 2
-    fi
 
+<<<<<<< HEAD
     for v in 11 10 9
     do
         PYTHON="python3.${v}"
@@ -328,3 +313,6 @@ help
 ;;
 esac
 exit 0
+=======
+pip install -e .
+>>>>>>> fa6ca9091 (my)

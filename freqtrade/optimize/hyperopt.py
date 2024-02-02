@@ -545,6 +545,14 @@ class Hyperopt:
 
         self._save_result(val)
 
+        if self.experiment_plateau_stopper(val["loss"], current):
+            logger.warning(
+                f"Early stopping - current_epoch: {current} - best_epoch: {self.best_epoch}"
+            )
+            return True
+        else:
+            return False
+
     def start(self) -> None:
         self.random_state = self._set_random_state(self.config.get('hyperopt_random_state'))
         logger.info(f"Using optimizer random state: {self.random_state}")
@@ -553,6 +561,13 @@ class Hyperopt:
         self.init_spaces()
 
         self.prepare_hyperopt_data()
+
+        self.experiment_plateau_stopper = myExperimentPlateauStopper(
+            mode="min",
+            std=0.001,
+            top=10,
+            patience=max(100, self.total_epochs // 5),
+        )
 
         # We don't need exchange instance anymore while running hyperopt
         self.backtesting.exchange.close()
@@ -606,6 +621,7 @@ class Hyperopt:
                         start += 1
 
                     evals = ceil((self.total_epochs - start) / jobs)
+                    should_stop = False
                     for i in range(evals):
                         # Correct the number of epochs to be processed for the last
                         # iteration (should not exceed self.total_epochs in total)
@@ -620,8 +636,18 @@ class Hyperopt:
                             # Use human-friendly indexes here (starting from 1)
                             current = i * jobs + j + 1 + start
 
-                            self.evaluate_result(val, current, is_random[j])
+                            if self.evaluate_result(val, current, is_random[j]):
+                                should_stop = True
+                                break
+
                             pbar.update(task, advance=1)
+
+                        if should_stop:
+                            break
+
+                    if parallel.n_dispatched_tasks != parallel.n_completed_tasks:
+                        logger.error(f"hyperopt start parallel tasks not finished: {parallel.n_completed_tasks}/{parallel.n_dispatched_tasks}")
+                        parallel._backend.abort_everything(ensure_ready=False)
 
         except KeyboardInterrupt:
             print('User interrupted..')
@@ -645,3 +671,116 @@ class Hyperopt:
             # This is printed when Ctrl+C is pressed quickly, before first epochs have
             # a chance to be evaluated.
             print("No epochs evaluated yet, no best result.")
+
+class myExperimentPlateauStopper:
+    """Early stop the experiment when a metric plateaued across trials.
+
+    Stops the entire experiment when the metric has plateaued
+    for more than the given amount of iterations specified in
+    the patience parameter.
+
+    Args:
+        metric: The metric to be monitored.
+        std: The minimal standard deviation after which
+            the tuning process has to stop.
+        top: The number of best models to consider.
+        mode: The mode to select the top results.
+            Can either be "min" or "max".
+        patience: Number of epochs to wait for
+            a change in the top models.
+
+    Raises:
+        ValueError: If the mode parameter is not "min" nor "max".
+        ValueError: If the top parameter is not an integer
+            greater than 1.
+        ValueError: If the standard deviation parameter is not
+            a strictly positive float.
+        ValueError: If the patience parameter is not
+            a strictly positive integer.
+    """
+
+    def __init__(
+        self, std: float = 0.001, top: int = 10, mode: str = "min", patience: int = 100
+    ):
+        if mode not in ("min", "max"):
+            raise ValueError("The mode parameter can only be either min or max.")
+        if not isinstance(top, int) or top <= 1:
+            raise ValueError(
+                "Top results to consider must be"
+                " a positive integer greater than one."
+            )
+        if not isinstance(patience, int) or patience < 0:
+            raise ValueError("Patience must be a strictly positive integer.")
+        if not isinstance(std, float) or std <= 0:
+            raise ValueError(
+                "The standard deviation must be a strictly positive float number."
+            )
+        self._mode = mode
+        self._patience = patience
+        self._iterations = 0
+        self._std = std
+        self._top = top
+        self._top_values = []
+        self._best_epoch = 0
+        self._current_epoch = 0
+        self._best_result = 0
+
+    def __call__(self, result, epoch):
+        """Return a boolean representing if the tuning has to stop."""
+        self._top_values.append(result)
+        self._current_epoch = epoch
+        if self._mode == "min":
+            self._top_values = sorted(self._top_values)[: self._top]
+            if result < self._best_result:
+                self._best_result = result
+                self._best_epoch = epoch
+        else:
+            self._top_values = sorted(self._top_values)[-self._top :]
+            if result > self._best_result:
+                self._best_result = result
+                self._best_epoch = epoch
+
+        std_value = abs(np.std(self._top_values) / np.mean(self._top_values))
+
+        # If the current iteration has to stop
+        has_plateaued = self.has_plateaued()
+        no_increase = self.no_increase()
+        if has_plateaued:
+            # we increment the total counter of iterations
+            self._iterations += 1
+        else:
+            # otherwise we reset the counter
+            self._iterations = 0
+        if not no_increase:
+            self._iterations = 0
+
+        # and then call the method that re-executes
+        # the checks, including the iterations.
+        stop_all = self.stop_all()
+        if stop_all:
+            logger.warning(
+                f"myExperimentPlateauStopper - epoch: {epoch} / _iterations: {self._iterations}/{self._patience} / has_plateaued: {has_plateaued} / no_increase: {no_increase} / stop_all: {stop_all} / std: {std_value}"
+            )
+            logger.warning(
+                f"myExperimentPlateauStopper - _current_epoch: {self._current_epoch} / _best_epoch: {self._best_epoch} / _patience: {self._patience}"
+            )
+            logger.warning(f"myExperimentPlateauStopper - {self._top_values}")
+        return stop_all
+
+    def no_increase(self):
+        return (
+            self._current_epoch - self._best_epoch
+            > self._patience  # 3 * self._patience
+        )
+
+    def has_plateaued(self):
+        return (
+            len(self._top_values) == self._top
+            and abs(np.std(self._top_values) / np.mean(self._top_values)) <= self._std
+        )
+
+    def stop_all(self):
+        """Return whether to stop and prevent trials from starting."""
+        return (self.has_plateaued() and self._iterations >= self._patience) or (
+            self.no_increase()
+        )

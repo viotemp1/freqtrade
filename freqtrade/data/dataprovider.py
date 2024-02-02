@@ -315,8 +315,8 @@ class DataProvider:
             tf_seconds = timeframe_to_seconds(str(timeframe))
             timerange.subtract_start(tf_seconds * startup_candles)
 
-            logger.info(f"Loading data for {pair} {timeframe} "
-                        f"from {timerange.start_fmt} to {timerange.stop_fmt}")
+            # logger.info(f"Loading data for {pair} {timeframe} "
+            #             f"from {timerange.start_fmt} to {timerange.stop_fmt}")
 
             self.__cached_pairs_backtesting[saved_pair] = load_pair_history(
                 pair=pair,

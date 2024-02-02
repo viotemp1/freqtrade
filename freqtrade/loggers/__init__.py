@@ -95,4 +95,4 @@ def setup_logging(config: Config) -> None:
     logging.root.setLevel(logging.INFO if verbosity < 1 else logging.DEBUG)
     set_loggers(verbosity, config.get('api_server', {}).get('verbosity', 'info'))
 
-    logger.info('Verbosity set to %s', verbosity)
+    # logger.info('Verbosity set to %s', verbosity)

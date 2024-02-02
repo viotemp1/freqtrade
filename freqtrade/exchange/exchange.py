@@ -18,6 +18,14 @@ from cachetools import TTLCache
 from ccxt import TICK_SIZE
 from dateutil import parser
 from pandas import DataFrame, concat
+from freqtrade.util.flock_decorator import my_lock
+from filelock import FileLock, Timeout, SoftFileLock
+import cloudpickle
+import os
+try:
+    from pushover import Pushover
+except:
+    pass
 
 from freqtrade.constants import (DEFAULT_AMOUNT_RESERVE_PERCENT, NON_OPEN_EXCHANGE_STATES, BidAsk,
                                  BuySell, Config, EntryExit, ExchangeConfig,
@@ -118,6 +126,15 @@ class Exchange:
         self._config: Config = {}
 
         self._config.update(config)
+
+        strategy1 = config.get('strategy', '')
+        if strategy1 is not None and len(strategy1) > 0 and strategy1.find("_") >=0:
+            strategy1 = strategy1.split("_")
+            if len(strategy1) >= 2:
+                strategy1 = strategy1[0] + "_" + strategy1[1]
+            else:
+                strategy1 = strategy1[0]
+        self.markets_filename = f"./tmp/Exchange_markets_{strategy1}.pkl"
 
         # Holds last candle refreshed time of each pair
         self._pairs_last_refresh_time: Dict[PairWithTimeframe, int] = {}
@@ -487,17 +504,70 @@ class Exchange:
             logger.warning('Could not load async markets. Reason: %s', e)
             return
 
+#    def _load_markets(self) -> None:
+#        """ Initialize markets both sync and async """
+#        try:
+#            self._markets = self._api.load_markets(params={})
+#            self._load_async_markets()
+#            self._last_markets_refresh = dt_ts()
+#            if self._ft_has['needs_trading_fees']:
+#                self._trading_fees = self.fetch_trading_fees()
+
+#        except ccxt.BaseError:
+#            logger.exception('Unable to initialize markets.')
+
+    def file_too_old(self, filename="", age_seconds=0):
+        if not os.path.isfile(filename):
+            return True, -1
+        t = max(os.path.getmtime(filename), os.path.getctime(filename))
+        # (datetime.now()-datetime.fromtimestamp(t)).seconds, datetime.fromtimestamp(t)
+        # logger.warning(
+        #     f"{datetime.fromtimestamp(os.path.getmtime(filename))} / "
+        #     f"{datetime.fromtimestamp(os.path.getctime(filename))} / "
+        #     f"{ (datetime.now()-datetime.fromtimestamp(os.path.getmtime(filename))).total_seconds()} / "
+        #     f"{ (datetime.now() - datetime.fromtimestamp(os.path.getctime(filename))).total_seconds()}"
+        # )
+        r_f_age = (datetime.now() - datetime.fromtimestamp(t)).total_seconds()
+        r_file_too_old = r_f_age > age_seconds
+        # print(r_file_too_old, r_f_age)
+        return r_file_too_old, r_f_age
+
+    @my_lock('./tmp/exchange_load_markets.lock', mode="retry", retries=300, timeout=1)
     def _load_markets(self) -> None:
         """ Initialize markets both sync and async """
+        
         try:
-            self._markets = self._api.load_markets(params={})
-            self._load_async_markets()
-            self._last_markets_refresh = dt_ts()
+            # # lock = FileLock("api_load_markets.lock")
+            # lock = SoftFileLock("api_load_markets.lock")
+            # with lock.acquire(timeout=600):
+
+            file_too_old_val, file_age = self.file_too_old(filename=self.markets_filename, age_seconds=86400)
+            if (self._config['runmode'].value in ["hyperopt", "backtest", "util_no_exchange"] and file_too_old_val) or (self._config['runmode'].value not in ["hyperopt", "backtest", "util_no_exchange"]):
+                # self.log_once(f"vio - need to refresh pairlist - {self._config['runmode'].value}", logger.warning)
+                # if self._config['runmode'].value in ["hyperopt", "backtest", "util_no_exchange"]:
+                logger.info(f"vio - need to refresh markets - {self._config['runmode'].value}")
+                self._markets = self._api.load_markets(params={})
+                # print("self._markets", type(self._markets))
+                self._load_async_markets()
+                self._last_markets_refresh = dt_ts()
+                # print("len(self._markets)", len(self._markets))
+                if (self._config['runmode'].value in ["hyperopt", "backtest", "util_no_exchange"] and file_too_old_val):
+                    with open(self.markets_filename, mode='wb') as file:
+                       cloudpickle.dump(self._markets, file)
+            else:
+                with open(self.markets_filename, mode='rb') as file:
+                    self._markets = cloudpickle.load(file)
+                logger.info(f"vio - will use cached markets - {self._config['runmode'].value} - length: {len(self._markets)}")
+            
+
             if self._ft_has['needs_trading_fees']:
                 self._trading_fees = self.fetch_trading_fees()
-
         except ccxt.BaseError:
-            logger.exception('Unable to initialize markets.')
+            logger.exception('_load_markets - Unable to initialize markets - ccxt.BaseError.')
+        except Timeout:
+            logger.exception(f'_load_markets - Unable to initialize markets - Timeout FileLock')
+        except Exception as e:
+            logger.exception(f'_load_markets - Unable to initialize markets - {e}')
 
     def reload_markets(self, force: bool = False) -> None:
         """Reload markets both sync and async if refresh interval has passed """

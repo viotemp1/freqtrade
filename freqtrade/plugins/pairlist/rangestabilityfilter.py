@@ -143,6 +143,7 @@ class RangeStabilityFilter(IPairList):
             highest_high = daily_candles['high'].max()
             lowest_low = daily_candles['low'].min()
             pct_change = ((highest_high - lowest_low) / lowest_low) if lowest_low > 0 else 0
+
             self._pair_cache[pair] = pct_change
             return pct_change
         else:

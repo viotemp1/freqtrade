@@ -38,15 +38,15 @@ class PairListManager(LoggingMixin):
 
         if not os.path.isdir("./tmp"):
             os.mkdir("./tmp")
-        # self.pairlist_filename = "./tmp/PairListManager_pairlists.pkl"
+        self.file_cache_ttl = config.get('file_cache_ttl', 86400)
         strategy1 = config.get("strategy", "")
-        if len(strategy1) > 0 and strategy1.find("_") >= 0:
+        if strategy1 is not None and len(strategy1) > 0 and strategy1.find("_") >= 0:
             strategy1 = strategy1.split("_")
             if len(strategy1) >= 2:
                 strategy1 = strategy1[0] + "_" + strategy1[1]
             else:
                 strategy1 = strategy1[0]
-        self.pairlist_filename = f"./tmp/PairListManager_pairlists_{strategy1}.pkl"
+        self.pairlist_filename = f"tmp/PairListManager_pairlists_{strategy1}.pkl"
 
         for pairlist_handler_config in self._config.get('pairlists', []):
             pairlist_handler = PairListResolver.load_pairlist(
@@ -167,18 +167,27 @@ class PairListManager(LoggingMixin):
         # Process all Pairlist Handlers in the chain
         # except for the first one, which is the generator.
         file_too_old_val, file_age = self.file_too_old(
-            filename=self.pairlist_filename, age_seconds=86400
+            filename=self.pairlist_filename, age_seconds=self.file_cache_ttl
         )
+        # print("vio -", self._config["runmode"].value, file_too_old_val)
         if (
-            self._config["runmode"].value in ["hyperopt", "backtest", "util_no_exchange"]
+            self._config["runmode"].value
+            in ["hyperopt", "backtest", "util_no_exchange"]
             and file_too_old_val
-        ) or (self._config["runmode"].value not in ["hyperopt", "backtest", "util_no_exchange"]):
-            if self._config["runmode"].value in ["hyperopt", "backtest", "util_no_exchange"]:
+        ) or (
+            self._config["runmode"].value
+            not in ["hyperopt", "backtest", "util_no_exchange"]
+        ):
+            if (
+                self._config["runmode"].value
+                in ["hyperopt", "backtest", "util_no_exchange"]
+                and file_too_old_val
+            ):
                 # logger.info(
                 #     f"vio - need to refresh pairlist - {self._config['runmode'].value} - {self.pairlist_filename}"
                 # )
                 self.log_once1(
-                    f"vio - need to refresh pairlist - {self._config['runmode'].value}",
+                    f"vio - need to refresh pairlist - {self._config['runmode'].value} - {self.pairlist_filename}",
                     logger.info,
                 )
             for pairlist_handler in self._pairlist_handlers[1:]:
@@ -193,26 +202,27 @@ class PairListManager(LoggingMixin):
                     )
             if (
                 self._config["runmode"].value
-                in [
-                    "hyperopt",
-                    "backtest",
-                    "util_no_exchange"
-                ]
+                in ["hyperopt", "backtest", "util_no_exchange"]
                 and file_too_old_val
+                and len(pairlist) > 10
             ):
                 with open(self.pairlist_filename, mode="wb") as file:
                     cloudpickle.dump(pairlist, file)
+            if len(pairlist) <= 10 and self._first_run:
+                # with open(self.pairlist_filename, mode="rb") as file:
+                #     pairlist = cloudpickle.load(file)
+                logger.warning(f"vio - pairlist issue - len: {len(pairlist)}")
+                # self.log_once1(f"vio - pairlist issue - len: {len(pairlist)}", logger.warning)
         else:
             with open(self.pairlist_filename, mode="rb") as file:
                 pairlist = cloudpickle.load(file)
-            # logger.warning(
+            # logger.info(
             #     f"vio - will use cached pairlist - {self._config['runmode'].value} - length: {len(pairlist)} - {self.pairlist_filename}"
             # )
             self.log_once1(
-                f"vio - will use cached pairlist - {self._config['runmode'].value} - length: {len(pairlist)}",
+                f"vio - will use cached pairlist - {self._config['runmode'].value} - length: {len(pairlist)} - {self.pairlist_filename}",
                 logger.info,
             )
-        # logger.warning(f"vio - PairListManager - refresh_pairlist - filter_pairlist end")
 
         self._first_run = False
 
@@ -220,7 +230,9 @@ class PairListManager(LoggingMixin):
         # to ensure blacklist is respected.
         pairlist = self.verify_blacklist(pairlist, logger.warning)
 
-        self.log_once1(f"Whitelist with {len(pairlist)} pairs: {pairlist}", logger.debug)
+        self.log_once1(
+            f"Whitelist with {len(pairlist)} pairs: {pairlist}", logger.debug
+        )
 
         self._whitelist = pairlist
 

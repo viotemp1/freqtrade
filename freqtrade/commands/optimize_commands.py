@@ -108,6 +108,7 @@ def start_hyperopt(args: Dict[str, Any]) -> None:
 
     except Timeout:
         logger.info("Another running instance of freqtrade Hyperopt detected.")
+        logger.info(f"filelock: {Hyperopt.get_lock_filename(config)}")
         logger.info("Simultaneous execution of multiple Hyperopt commands is not supported. "
                     "Hyperopt module is resource hungry. Please run your Hyperopt sequentially "
                     "or on separate machines.")

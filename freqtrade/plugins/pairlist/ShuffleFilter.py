@@ -32,7 +32,7 @@ class ShuffleFilter(IPairList):
             logger.info("Live mode detected, not applying seed.")
         else:
             self._seed = pairlistconfig.get('seed')
-            logger.info(f"Backtesting mode detected, applying seed value: {self._seed}")
+            logger.info(f"{config.get('runmode')} mode detected, applying seed value: {self._seed}")
 
         self._random = random.Random(self._seed)
         self._shuffle_freq: ShuffleValues = pairlistconfig.get('shuffle_frequency', 'candle')

@@ -122,10 +122,15 @@ class Worker:
             if (now - self._heartbeat_msg) > self._heartbeat_interval:
                 version = __version__
                 strategy_version = self.freqtrade.strategy.version()
+                strategy_name = self.freqtrade.strategy.get_strategy_name()
+                if self.freqtrade.strategy.dp:
+                    len_whitelist = len(self.freqtrade.strategy.dp.current_whitelist())
+                else:
+                    len_whitelist = "n/a"
                 if (strategy_version is not None):
                     version += ', strategy_version: ' + strategy_version
-                logger.info(f"Bot heartbeat. PID={getpid()}, "
-                            f"version='{version}', state='{state.name}'")
+                logger.info(f"Bot heartbeat. PID={getpid()}, name={strategy_name}, "
+                            f"version='{version}', state='{state.name}', len_whitelist: {len_whitelist}")
                 self._heartbeat_msg = now
 
         return state

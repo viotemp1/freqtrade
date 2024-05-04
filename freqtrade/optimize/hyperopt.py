@@ -155,6 +155,7 @@ class Hyperopt:
             self.config["use_exit_signal"] = True
 
         self.print_all = self.config.get("print_all", False)
+        self.print_hyperopt_results = self.config.get("print_hyperopt_results", False)
         self.hyperopt_table_header = 0
         self.print_colorized = self.config.get("print_colorized", False)
         self.print_json = self.config.get("print_json", False)
@@ -632,7 +633,8 @@ class Hyperopt:
         # order they will be shown to the user.
         val["is_best"] = is_best
         val["is_random"] = is_random
-        self.print_results(val)
+        if self.print_hyperopt_results:
+            self.print_results(val)
 
         if is_best:
             self.current_best_loss = val["loss"]

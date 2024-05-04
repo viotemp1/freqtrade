@@ -2099,7 +2099,7 @@ class Exchange:
             self._async_get_historic_ohlcv(pair=pair, timeframe=timeframe,
                                            since_ms=since_ms, until_ms=until_ms,
                                            is_new_pair=is_new_pair, candle_type=candle_type))
-        logger.info(f"Downloaded data for {pair} with length {len(data)}.")
+        # logger.info(f"Downloaded data for {pair} with length {len(data)}.")
         return data
 
     async def _async_get_historic_ohlcv(self, pair: str, timeframe: str,

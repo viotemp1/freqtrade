@@ -21,6 +21,8 @@ from freqtrade.util import dt_ts, format_ms_time
 from freqtrade.util.datetime_helpers import dt_now
 from freqtrade.util.migrations import migrate_data
 
+from tqdm.auto import tqdm
+
 
 logger = logging.getLogger(__name__)
 
@@ -225,11 +227,11 @@ def _download_pair_history(pair: str, *,
             candle_type=candle_type,
             prepend=prepend)
 
-        logger.info(f'({process}) - Download history data for "{pair}", {timeframe}, '
-                    f'{candle_type} and store in {datadir}. '
-                    f'From {format_ms_time(since_ms) if since_ms else "start"} to '
-                    f'{format_ms_time(until_ms) if until_ms else "now"}'
-                    )
+        # logger.info(f'({process}) - Download history data for "{pair}", {timeframe}, '
+        #             f'{candle_type} and store in {datadir}. '
+        #             f'From {format_ms_time(since_ms) if since_ms else "start"} to '
+        #             f'{format_ms_time(until_ms) if until_ms else "now"}'
+        #             )
 
         logger.debug("Current Start: %s",
                      f"{data.iloc[0]['date']:{DATETIME_PRINT_FORMAT}}"
@@ -292,7 +294,8 @@ def refresh_backtest_ohlcv_data(exchange: Exchange, pairs: List[str], timeframes
     data_handler = get_datahandler(datadir, data_format)
     candle_type = CandleType.get_default(trading_mode)
     process = ''
-    for idx, pair in enumerate(pairs, start=1):
+    # for idx, pair in enumerate(pairs, start=1):
+    for idx, pair in tqdm(enumerate(pairs, start=1), total=len(pairs)):
         if pair not in exchange.markets:
             pairs_not_available.append(pair)
             logger.info(f"Skipping pair {pair}...")

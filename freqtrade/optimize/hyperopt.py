@@ -52,7 +52,7 @@ from freqtrade.optimize.hyperopt_tools import (
 )
 from freqtrade.optimize.optimize_reports import generate_strategy_stats
 from freqtrade.resolvers.hyperopt_resolver import HyperOptLossResolver
-
+import numpy as np
 
 # Suppress scikit-learn FutureWarnings from skopt
 with warnings.catch_warnings():

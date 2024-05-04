@@ -107,7 +107,7 @@ class Binance(Exchange):
             if x and x[3] and x[3][0] and x[3][0][0] > since_ms:
                 # Set starting date to first available candle.
                 since_ms = x[3][0][0]
-                logger.info(
+                logger.debug(
                     f"Candle-data for {pair} available starting with "
                     f"{datetime.fromtimestamp(since_ms // 1000, tz=timezone.utc).isoformat()}.")
 

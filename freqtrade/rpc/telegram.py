@@ -774,7 +774,10 @@ class Telegram(RPCHandler):
                 # insert separators line between Total
                 lines = message.split("\n")
                 message = "\n".join(lines[:-1] + [lines[1]] + [lines[-1]])
-            await self._send_msg(f"<pre>{message}</pre>", parse_mode=ParseMode.HTML,
+            # await self._send_msg(f"<pre>{message}</pre>", parse_mode=ParseMode.HTML,
+            #                      reload_able=True, callback_path="update_status_table",
+            #                      query=update.callback_query)
+            await self._send_msg(f'```{message}```', parse_mode=ParseMode..MARKDOWN_V2,
                                  reload_able=True, callback_path="update_status_table",
                                  query=update.callback_query)
 

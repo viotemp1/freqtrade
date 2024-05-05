@@ -159,7 +159,7 @@ class RangeStabilityFilter(IPairList):
 
         result = True
         if pct_change < self._min_rate_of_change:
-            if self._config.get("runmode", None) not in in ["live"]:
+            if self._config.get("runmode", None) not in ["live"]:
                 self.log_once(f"Removed {pair} from whitelist, because rate of change "
                               f"over {self._days} {plural(self._days, 'day')} is {pct_change:.3f}, "
                               f"which is below the threshold of {self._min_rate_of_change}.",
@@ -167,7 +167,7 @@ class RangeStabilityFilter(IPairList):
             result = False
         if self._max_rate_of_change:
             if pct_change > self._max_rate_of_change:
-                if self._config.get("runmode", None) not in in ["live"]:
+                if self._config.get("runmode", None) not in ["live"]:
                     self.log_once(
                         f"Removed {pair} from whitelist, because rate of change "
                         f"over {self._days} {plural(self._days, 'day')} is {pct_change:.3f}, "

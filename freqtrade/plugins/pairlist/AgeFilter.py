@@ -137,7 +137,7 @@ class AgeFilter(IPairList):
                 self._symbolsChecked[pair] = dt_ts()
                 return True
             else:
-                if self._config.get("runmode", None) not in in ["live"]:
+                if self._config.get("runmode", None) not in ["live"]:
                     self.log_once((
                         f"Removed {pair} from whitelist, because age "
                         f"{len(daily_candles)} is less than {self._min_days_listed} "

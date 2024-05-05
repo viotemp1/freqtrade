@@ -750,7 +750,7 @@ class Telegram(RPCHandler):
         :return: None
         """
         fiat_currency = self._config.get('fiat_display_currency', '')
-        statlist, head, fiat_profit_sum = self._rpc._rpc_status_table(
+        statlist, head, fiat_profit_sum, pairlist = self._rpc._rpc_status_table(
             self._config['stake_currency'], fiat_currency)
 
         show_total = not isnan(fiat_profit_sum) and len(statlist) > 1
@@ -774,12 +774,16 @@ class Telegram(RPCHandler):
                 # insert separators line between Total
                 lines = message.split("\n")
                 message = "\n".join(lines[:-1] + [lines[1]] + [lines[-1]])
-            # await self._send_msg(f"<pre>{message}</pre>", parse_mode=ParseMode.HTML,
-            #                      reload_able=True, callback_path="update_status_table",
-            #                      query=update.callback_query)
-            await self._send_msg(f'```{message}```', parse_mode=ParseMode.MARKDOWN_V2,
+            final_message = f"<pre>{message}</pre>"
+            for pair in pairlist:
+                final_message += "\n" + f"<a href='https://www.tradingview.com/symbols/{str(pair).replace('/','')}/'>{pair}</a>"
+            
+            await self._send_msg(final_message, parse_mode=ParseMode.HTML,
                                  reload_able=True, callback_path="update_status_table",
                                  query=update.callback_query)
+            # await self._send_msg(f'```{message}```', parse_mode=ParseMode.MARKDOWN_V2,
+            #                      reload_able=True, callback_path="update_status_table",
+            #                      query=update.callback_query)
 
     async def _timeunit_stats(self, update: Update, context: CallbackContext, unit: str) -> None:
         """
@@ -1158,7 +1162,7 @@ class Telegram(RPCHandler):
         else:
             fiat_currency = self._config.get('fiat_display_currency', '')
             try:
-                statlist, _, _ = self._rpc._rpc_status_table(
+                statlist, _, _, pairlist = self._rpc._rpc_status_table(
                     self._config['stake_currency'], fiat_currency)
             except RPCException:
                 await self._send_msg(msg='No open trade found.')

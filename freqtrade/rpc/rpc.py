@@ -262,6 +262,7 @@ class RPC:
             raise RPCException('no active trade')
         else:
             trades_list = []
+            pairs_list = []
             fiat_profit_sum = NAN
             for trade in trades:
                 # calculate profit and send message to user
@@ -305,10 +306,10 @@ class RPC:
                 active_attempt_side_symbols_str = '.'.join(active_attempt_side_symbols)
 
                 # pair = f"<a href='https://www.tradingview.com/symbols/{str(trade.pair).replace('/','')}/'>{trade.pair}</a>"
-                pair = f"[{trade.pair}](https://www.tradingview.com/symbols/{str(trade.pair).replace('/','')}/)"
+                # pair = f"[{trade.pair}](https://www.tradingview.com/symbols/{str(trade.pair).replace('/','')}/)"
                 detail_trade = [
                     f'{trade.id} {direction_str}',
-                    pair + active_attempt_side_symbols_str, # trade.pair
+                    trade.pair + active_attempt_side_symbols_str, # trade.pair
                     shorten_date(dt_humanize_delta(trade.open_date_utc)),
                     profit_str
                 ]
@@ -320,6 +321,7 @@ class RPC:
                     filled_entries = trade.nr_of_successful_entries
                     detail_trade.append(f"{filled_entries}{max_entry_str}")
                 trades_list.append(detail_trade)
+                pairs_list.append(trade.pair)
             profitcol = "Profit"
             if self._fiat_converter:
                 profitcol += " (" + fiat_display_currency + ")"
@@ -333,7 +335,7 @@ class RPC:
                 profitcol]
             if self._config.get('position_adjustment_enable', False):
                 columns.append('# Entries')
-            return trades_list, columns, fiat_profit_sum
+            return trades_list, columns, fiat_profit_sum, pairs_list
 
     def _rpc_timeunit_profit(
             self, timescale: int,

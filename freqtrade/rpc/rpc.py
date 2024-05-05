@@ -305,8 +305,6 @@ class RPC:
                 # example: '*.**.**' trying to enter, exit and exit with 3 different orders
                 active_attempt_side_symbols_str = '.'.join(active_attempt_side_symbols)
 
-                # pair = f"<a href='https://www.tradingview.com/symbols/{str(trade.pair).replace('/','')}/'>{trade.pair}</a>"
-                # pair = f"[{trade.pair}](https://www.tradingview.com/symbols/{str(trade.pair).replace('/','')}/)"
                 detail_trade = [
                     f'{trade.id} {direction_str}',
                     trade.pair + active_attempt_side_symbols_str, # trade.pair

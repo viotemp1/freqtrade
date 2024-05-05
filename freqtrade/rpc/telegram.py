@@ -781,9 +781,6 @@ class Telegram(RPCHandler):
             await self._send_msg(final_message, parse_mode=ParseMode.HTML,
                                  reload_able=True, callback_path="update_status_table",
                                  query=update.callback_query)
-            # await self._send_msg(f'```{message}```', parse_mode=ParseMode.MARKDOWN_V2,
-            #                      reload_able=True, callback_path="update_status_table",
-            #                      query=update.callback_query)
 
     async def _timeunit_stats(self, update: Update, context: CallbackContext, unit: str) -> None:
         """

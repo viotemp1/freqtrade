@@ -776,7 +776,7 @@ class Telegram(RPCHandler):
                 message = "\n".join(lines[:-1] + [lines[1]] + [lines[-1]])
             final_message = f"<pre>{message}</pre>" + "\n"
             for pair in pairlist:
-                final_message +=  f"<a href='https://www.tradingview.com/symbols/{str(pair).replace('/','')}/'>{pair\t}</a>"
+                final_message +=  f"<a href='https://www.tradingview.com/symbols/{str(pair).replace('/','')}/'>{pair}&emsp;</a>"
             
             await self._send_msg(final_message, parse_mode=ParseMode.HTML,
                                  reload_able=True, callback_path="update_status_table",

@@ -16,6 +16,7 @@ from freqtrade.mixins import LoggingMixin
 from freqtrade.plugins.pairlist.IPairList import IPairList
 from freqtrade.plugins.pairlist.pairlist_helpers import expand_pairlist
 from freqtrade.resolvers import PairListResolver
+from freqtrade.enums import RunMode
 
 import os
 from datetime import datetime
@@ -253,7 +254,7 @@ class PairListManager(LoggingMixin):
             return []
         log_once = partial(self.log_once, logmethod=logmethod)
         for pair in pairlist.copy():
-            if pair in blacklist and self._config.get("runmode", None) not in ["live"]:
+            if pair in blacklist and self._config.get("runmode", None) not in [RunMode.LIVE]:
                 log_once(f"Pair {pair} in your blacklist. Removing it from whitelist...")
                 pairlist.remove(pair)
         return pairlist

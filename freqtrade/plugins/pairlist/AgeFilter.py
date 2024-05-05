@@ -14,6 +14,7 @@ from freqtrade.exchange.types import Tickers
 from freqtrade.misc import plural
 from freqtrade.plugins.pairlist.IPairList import IPairList, PairlistParameter
 from freqtrade.util import PeriodicCache, dt_floor_day, dt_now, dt_ts
+from freqtrade.enums import RunMode
 
 
 logger = logging.getLogger(__name__)
@@ -137,7 +138,7 @@ class AgeFilter(IPairList):
                 self._symbolsChecked[pair] = dt_ts()
                 return True
             else:
-                if self._config.get("runmode", None) not in ["live"]:
+                if self._config.get("runmode", None) not in [RunMode.LIVE]:
                     self.log_once((
                         f"Removed {pair} from whitelist, because age "
                         f"{len(daily_candles)} is less than {self._min_days_listed} "

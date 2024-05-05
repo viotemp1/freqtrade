@@ -14,6 +14,7 @@ from freqtrade.exchange.types import Tickers
 from freqtrade.misc import plural
 from freqtrade.plugins.pairlist.IPairList import IPairList, PairlistParameter
 from freqtrade.util import dt_floor_day, dt_now, dt_ts
+from freqtrade.enums import RunMode
 
 
 logger = logging.getLogger(__name__)
@@ -159,7 +160,7 @@ class RangeStabilityFilter(IPairList):
 
         result = True
         if pct_change < self._min_rate_of_change:
-            if self._config.get("runmode", None) not in ["live"]:
+            if self._config.get("runmode", None) not in [RunMode.LIVE]:
                 self.log_once(f"Removed {pair} from whitelist, because rate of change "
                               f"over {self._days} {plural(self._days, 'day')} is {pct_change:.3f}, "
                               f"which is below the threshold of {self._min_rate_of_change}.",
@@ -167,7 +168,7 @@ class RangeStabilityFilter(IPairList):
             result = False
         if self._max_rate_of_change:
             if pct_change > self._max_rate_of_change:
-                if self._config.get("runmode", None) not in ["live"]:
+                if self._config.get("runmode", None) not in [RunMode.LIVE]:
                     self.log_once(
                         f"Removed {pair} from whitelist, because rate of change "
                         f"over {self._days} {plural(self._days, 'day')} is {pct_change:.3f}, "

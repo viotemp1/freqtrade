@@ -776,7 +776,7 @@ class Telegram(RPCHandler):
                 message = "\n".join(lines[:-1] + [lines[1]] + [lines[-1]])
             final_message = f"<pre>{message}</pre>" + "\n"
             for pair in pairlist:
-                final_message +=  f"<a href='https://www.tradingview.com/symbols/{str(pair).replace('/','')}/'>{pair}&emsp;</a>"
+                final_message +=  f"<a href='https://www.tradingview.com/symbols/{str(pair).replace('/','')}/'>{pair}\t</a>"
             
             await self._send_msg(final_message, parse_mode=ParseMode.HTML,
                                  reload_able=True, callback_path="update_status_table",
@@ -1886,6 +1886,7 @@ class Telegram(RPCHandler):
                     parse_mode=parse_mode,
                     reply_markup=reply_markup,
                     disable_notification=disable_notification,
+                    disable_web_page_preview=True,
                 )
             except NetworkError as network_err:
                 # Sometimes the telegram server resets the current connection,
@@ -1900,6 +1901,7 @@ class Telegram(RPCHandler):
                     parse_mode=parse_mode,
                     reply_markup=reply_markup,
                     disable_notification=disable_notification,
+                    disable_web_page_preview=True,
                 )
         except TelegramError as telegram_err:
             logger.warning(

@@ -137,14 +137,15 @@ class AgeFilter(IPairList):
                 self._symbolsChecked[pair] = dt_ts()
                 return True
             else:
-                self.log_once((
-                    f"Removed {pair} from whitelist, because age "
-                    f"{len(daily_candles)} is less than {self._min_days_listed} "
-                    f"{plural(self._min_days_listed, 'day')}"
-                ) + ((
-                    " or more than "
-                    f"{self._max_days_listed} {plural(self._max_days_listed, 'day')}"
-                ) if self._max_days_listed else ''), logger.info)
-                self._symbolsCheckFailed[pair] = dt_ts()
+                if self._config.get("runmode", None) not in in ["live"]:
+                    self.log_once((
+                        f"Removed {pair} from whitelist, because age "
+                        f"{len(daily_candles)} is less than {self._min_days_listed} "
+                        f"{plural(self._min_days_listed, 'day')}"
+                    ) + ((
+                        " or more than "
+                        f"{self._max_days_listed} {plural(self._max_days_listed, 'day')}"
+                    ) if self._max_days_listed else ''), logger.info)
+                    self._symbolsCheckFailed[pair] = dt_ts()
                 return False
         return False

@@ -177,7 +177,7 @@ class Wallets:
                 self._update_live()
             else:
                 self._update_dry()
-            if not self._is_backtest:
+            if not self._is_backtest and self._config.get("runmode", None) not in in ["live"]:
                 logger.info('Wallets synced.')
             self._last_wallet_refresh = dt_now()
 

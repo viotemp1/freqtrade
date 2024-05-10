@@ -34,7 +34,9 @@ def start_download_data(args: Dict[str, Any]) -> None:
     """
     Download data (former download_backtest_data.py script)
     """
+    # print("start_download_data", args)
     config = setup_utils_configuration(args, RunMode.UTIL_EXCHANGE)
+    # print("start_download_data", config)
 
     _check_data_config_download_sanity(config)
 
@@ -102,7 +104,7 @@ def start_list_data(args: Dict[str, Any]) -> None:
     """
     List available backtest data
     """
-
+    # print("start_list_data", args)
     config = setup_utils_configuration(args, RunMode.UTIL_NO_EXCHANGE)
 
     from tabulate import tabulate

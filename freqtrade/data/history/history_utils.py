@@ -284,6 +284,7 @@ def refresh_backtest_ohlcv_data(exchange: Exchange, pairs: List[str], timeframes
                                 new_pairs_days: int = 30, erase: bool = False,
                                 data_format: Optional[str] = None,
                                 prepend: bool = False,
+                                use_tqdm: bool = True
                                 ) -> List[str]:
     """
     Refresh stored ohlcv data for backtesting and hyperopt operations.
@@ -295,7 +296,8 @@ def refresh_backtest_ohlcv_data(exchange: Exchange, pairs: List[str], timeframes
     candle_type = CandleType.get_default(trading_mode)
     process = ''
     # for idx, pair in enumerate(pairs, start=1):
-    for idx, pair in tqdm(enumerate(pairs, start=1), total=len(pairs)):
+    # print("refresh_backtest_ohlcv_data", use_tqdm)
+    for idx, pair in tqdm(enumerate(pairs, start=1), total=len(pairs), disable=not use_tqdm):
         if pair not in exchange.markets:
             pairs_not_available.append(pair)
             logger.info(f"Skipping pair {pair}...")
@@ -521,6 +523,7 @@ def download_data_main(config: Config) -> None:
         exchange.validate_timeframes(timeframe)
 
     # Start downloading
+    # print(config)
     try:
         if config.get('download_trades'):
             pairs_not_available = refresh_backtest_trades_data(
@@ -552,7 +555,8 @@ def download_data_main(config: Config) -> None:
                 new_pairs_days=config['new_pairs_days'],
                 erase=bool(config.get('erase')), data_format=config['dataformat_ohlcv'],
                 trading_mode=config.get('trading_mode', 'spot'),
-                prepend=config.get('prepend_data', False)
+                prepend=config.get('prepend_data', False),
+                use_tqdm=config.get('use_tqdm', True)
             )
     finally:
         if pairs_not_available:

@@ -225,15 +225,15 @@ class PairListManager(LoggingMixin):
                 logger.info,
             )
 
-        self._first_run = False
-
         # Validation against blacklist happens after the chain of Pairlist Handlers
         # to ensure blacklist is respected.
-        pairlist = self.verify_blacklist(pairlist, logger.warning)
+        pairlist = self.verify_blacklist(pairlist, logger.warning if self._first_run else logger.debug) # warning
 
         self.log_once1(
             f"Whitelist with {len(pairlist)} pairs: {pairlist}", logger.debug
         )
+
+        self._first_run = False
 
         self._whitelist = pairlist
 

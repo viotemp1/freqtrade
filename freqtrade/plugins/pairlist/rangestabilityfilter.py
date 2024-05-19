@@ -172,20 +172,21 @@ class RangeStabilityFilter(IPairList):
         """
 
         result = True
+        runmode = self._config.get("runmode", None)
         if pct_change < self._min_rate_of_change:
-            if self._config.get("runmode", None) not in [RunMode.LIVE]:
+            if runmode not in [RunMode.LIVE]:
                 self.log_once(f"Removed {pair} from whitelist, because rate of change "
                               f"over {self._days} {plural(self._days, 'day')} is {pct_change:.3f}, "
-                              f"which is below the threshold of {self._min_rate_of_change}.",
+                              f"which is below the threshold of {self._min_rate_of_change}. {runmode}",
                               logger.info)
             result = False
         if self._max_rate_of_change:
             if pct_change > self._max_rate_of_change:
-                if self._config.get("runmode", None) not in [RunMode.LIVE]:
+                if runmode not in [RunMode.LIVE]:
                     self.log_once(
                         f"Removed {pair} from whitelist, because rate of change "
                         f"over {self._days} {plural(self._days, 'day')} is {pct_change:.3f}, "
-                        f"which is above the threshold of {self._max_rate_of_change}.",
+                        f"which is above the threshold of {self._max_rate_of_change}. {runmode}",
                         logger.info)
                 result = False
         return result

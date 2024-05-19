@@ -389,9 +389,7 @@ class Hyperopt:
         if HyperoptTools.has_space(self.config, "trailing"):
             d = self.custom_hyperopt.generate_trailing_params(params_dict)
             self.backtesting.strategy.trailing_stop = d["trailing_stop"]
-            self.backtesting.strategy.trailing_stop_positive = d[
-                "trailing_stop_positive"
-            ]
+            self.backtesting.strategy.trailing_stop_positive = d["trailing_stop_positive"]
             self.backtesting.strategy.trailing_stop_positive_offset = d[
                 "trailing_stop_positive_offset"
             ]
@@ -401,18 +399,14 @@ class Hyperopt:
 
         if HyperoptTools.has_space(self.config, "trades"):
             if self.config["stake_amount"] == "unlimited" and (
-                params_dict["max_open_trades"] == -1
-                or params_dict["max_open_trades"] == 0
+                params_dict["max_open_trades"] == -1 or params_dict["max_open_trades"] == 0
             ):
                 # Ignore unlimited max open trades if stake amount is unlimited
                 params_dict.update({"max_open_trades": self.config["max_open_trades"]})
 
             updated_max_open_trades = (
                 int(params_dict["max_open_trades"])
-                if (
-                    params_dict["max_open_trades"] != -1
-                    and params_dict["max_open_trades"] != 0
-                )
+                if (params_dict["max_open_trades"] != -1 and params_dict["max_open_trades"] != 0)
                 else float("inf")
             )
 
@@ -442,12 +436,7 @@ class Hyperopt:
         )
 
     def _get_results_dict(
-        self,
-        backtesting_results,
-        min_date,
-        max_date,
-        params_dict,
-        processed: Dict[str, DataFrame],
+        self, backtesting_results, min_date, max_date, params_dict, processed: Dict[str, DataFrame]
     ) -> Dict[str, Any]:
         params_details = self._get_params_details(params_dict)
 
@@ -516,13 +505,10 @@ class Hyperopt:
             model_queue_size=SKOPT_MODEL_QUEUE_SIZE,
         )
 
-    def run_optimizer_parallel(
-        self, parallel: Parallel, asked: List[List]
-    ) -> List[Dict[str, Any]]:
+    def run_optimizer_parallel(self, parallel: Parallel, asked: List[List]) -> List[Dict[str, Any]]:
         """Start optimizer in a parallel way"""
         return parallel(
-            delayed(wrap_non_picklable_objects(self.generate_optimizer))(v)
-            for v in asked
+            delayed(wrap_non_picklable_objects(self.generate_optimizer))(v) for v in asked
         )
 
     def _set_random_state(self, random_state: Optional[int]) -> int:
@@ -651,9 +637,7 @@ class Hyperopt:
             return False
 
     def start(self) -> None:
-        self.random_state = self._set_random_state(
-            self.config.get("hyperopt_random_state")
-        )
+        self.random_state = self._set_random_state(self.config.get("hyperopt_random_state"))
         logger.info(f"Using optimizer random state: {self.random_state}")
         self.hyperopt_table_header = -1
         # Initialize spaces ...
@@ -760,9 +744,7 @@ class Hyperopt:
 
         if self.current_best_epoch:
             HyperoptTools.try_export_params(
-                self.config,
-                self.backtesting.strategy.get_strategy_name(),
-                self.current_best_epoch,
+                self.config, self.backtesting.strategy.get_strategy_name(), self.current_best_epoch
             )
 
             HyperoptTools.show_epoch_details(

@@ -277,6 +277,7 @@ class RPC:
             raise RPCException("no active trade")
         else:
             trades_list = []
+            pairs_list = []
             fiat_profit_sum = NAN
             for trade in trades:
                 # calculate profit and send message to user
@@ -334,6 +335,7 @@ class RPC:
                     filled_entries = trade.nr_of_successful_entries
                     detail_trade.append(f"{filled_entries}{max_entry_str}")
                 trades_list.append(detail_trade)
+                pairs_list.append(trade.pair)
             profitcol = "Profit"
             if self._fiat_converter:
                 profitcol += " (" + fiat_display_currency + ")"
@@ -343,7 +345,7 @@ class RPC:
             columns = ["ID L/S" if nonspot else "ID", "Pair", "Since", profitcol]
             if self._config.get("position_adjustment_enable", False):
                 columns.append("# Entries")
-            return trades_list, columns, fiat_profit_sum
+            return trades_list, columns, fiat_profit_sum, pairs_list
 
     def _rpc_timeunit_profit(
         self,

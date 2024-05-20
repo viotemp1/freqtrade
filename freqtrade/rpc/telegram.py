@@ -1934,33 +1934,40 @@ class Telegram(RPCHandler):
             trade_id = int(context.args[0])
             key = None if len(context.args) < 2 else str(context.args[1])
 
+            # logger.warning(f"telegram _list_custom_data - trade_id: {trade_id} - key: {key}")
             results = self._rpc._rpc_list_custom_data(trade_id, key)
+            # logger.warning(f"telegram _list_custom_data - results: {results}")
             messages = []
+            head = ["key", "value"]
             if len(results) > 0:
-                messages.append("Found custom-data entr" + ("ies: " if len(results) > 1 else "y: "))
+                # messages.append("Found custom-data entr" + ("ies: " if len(results) > 1 else "y: "))
+                # for result in results:
+                #     lines = [
+                #         f"*Key:* `{result['cd_key']}` - *Value:* `{result['cd_value']}`",
+                #         # f"*ID:* `{result['id']}`",
+                #         # f"*Trade ID:* `{result['ft_trade_id']}`",
+                #         # f"*Type:* `{result['cd_type']}`",
+                #         # f"*Value:* `{result['cd_value']}`",
+                #         # f"*Create Date:* `{format_date(result['created_at'])}`",
+                #         # f"*Update Date:* `{format_date(result['updated_at'])}`",
+                #     ]
+                #     # Filter empty lines using list-comprehension
+                #     messages.append("\n".join([line for line in lines if line]))
+                # for msg in messages:
+                #     if len(msg) > MAX_MESSAGE_LENGTH:
+                #         msg = "Message dropped because length exceeds "
+                #         msg += f"maximum allowed characters: {MAX_MESSAGE_LENGTH}"
+                #         logger.warning(msg)
+                #     await self._send_msg(msg)
                 for result in results:
-                    lines = [
-                        f"*Key:* `{result['cd_key']}`",
-                        f"*ID:* `{result['id']}`",
-                        f"*Trade ID:* `{result['ft_trade_id']}`",
-                        f"*Type:* `{result['cd_type']}`",
-                        f"*Value:* `{result['cd_value']}`",
-                        f"*Create Date:* `{format_date(result['created_at'])}`",
-                        f"*Update Date:* `{format_date(result['updated_at'])}`",
-                    ]
-                    # Filter empty lines using list-comprehension
-                    messages.append("\n".join([line for line in lines if line]))
-                for msg in messages:
-                    if len(msg) > MAX_MESSAGE_LENGTH:
-                        msg = "Message dropped because length exceeds "
-                        msg += f"maximum allowed characters: {MAX_MESSAGE_LENGTH}"
-                        logger.warning(msg)
-                    await self._send_msg(msg)
+                    messages.append([result['cd_key'], result['cd_value']])
+                message = tabulate(messages, headers=head, tablefmt="simple")
+                final_message = f"<pre>{message}</pre>" + "\n"
+                await self._send_msg(final_message, parse_mode=ParseMode.HTML)
             else:
                 message = f"Didn't find any custom-data entries for Trade ID: `{trade_id}`"
                 message += f" and Key: `{key}`." if key is not None else ""
                 await self._send_msg(message)
-
         except RPCException as e:
             await self._send_msg(str(e))
 

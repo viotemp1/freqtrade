@@ -1943,9 +1943,9 @@ class Telegram(RPCHandler):
                     head = ["key", "value"]
                     if len(results) > 0:
                         for result in results:
-                            messages.append([result['cd_key'], result['cd_value']])
+                            messages.append(result['cd_key'], result['cd_value']])
                         message = tabulate(messages, headers=head, tablefmt="simple")
-                        final_message = f"<pre>{message}</pre>" + "\n"
+                        final_message = f"Trade ID: {trade_id}\n<pre>{message}</pre>" + "\n"
                         await self._send_msg(final_message, parse_mode=ParseMode.HTML)
                     else:
                         message = f"Didn't find any custom-data entries for Trade ID: `{trade_id}`"

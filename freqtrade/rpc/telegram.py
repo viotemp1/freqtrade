@@ -1936,6 +1936,7 @@ class Telegram(RPCHandler):
                 trades_list = Trade.get_open_trades()
                 for trade in trades_list:
                     trade_id = trade.id
+                    trade_pair = trade.pair
                     # logger.warning(f"telegram _list_custom_data - trade_id: {trade_id} - key: {key}")
                     results = self._rpc._rpc_list_custom_data(trade_id, key)
                     # logger.warning(f"telegram _list_custom_data - results: {results}")
@@ -1945,7 +1946,7 @@ class Telegram(RPCHandler):
                         for result in results:
                             messages.append(result['cd_key'], result['cd_value']])
                         message = tabulate(messages, headers=head, tablefmt="simple")
-                        final_message = f"Trade ID: {trade_id}\n<pre>{message}</pre>" + "\n"
+                        final_message = f"Trade ID: {trade_id} - Pair: {trade_pair}\n<pre>{message}</pre>" + "\n"
                         await self._send_msg(final_message, parse_mode=ParseMode.HTML)
                     else:
                         message = f"Didn't find any custom-data entries for Trade ID: `{trade_id}`"

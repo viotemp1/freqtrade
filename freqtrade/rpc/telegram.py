@@ -149,6 +149,7 @@ class Telegram(RPCHandler):
             ["/daily", "/profit", "/balance"],
             ["/status", "/status table", "/performance"],
             ["/count", "/start", "/stop", "/help"],
+            ["/stopentry", "/list_custom_data"]
         ]
         # do not allow commands with mandatory arguments and critical cmds
         # TODO: DRY! - its not good to list all valid cmds here. But otherwise
@@ -159,6 +160,7 @@ class Telegram(RPCHandler):
             r"/stop$",
             r"/status$",
             r"/status table$",
+            r"/list_custom_data$",
             r"/trades$",
             r"/performance$",
             r"/buys",
@@ -1817,7 +1819,7 @@ class Telegram(RPCHandler):
             "*/marketdir [long | short | even | none]:* `Updates the user managed variable "
             "that represents the current market direction. If no direction is provided `"
             "`the currently set market direction will be output.` \n"
-            "*/list_custom_data <trade_id> <key>:* `List custom_data for Trade ID & Key combo.`\n"
+            "*/list_custom_data [<trade_id> <key>:*] `List custom_data for Trade ID & Key combo.`\n"
             "`If no Key is supplied it will list all key-value pairs found for that Trade ID.`"
             "_Statistics_\n"
             "------------\n"
@@ -1930,44 +1932,64 @@ class Telegram(RPCHandler):
         """
         try:
             if not context.args or len(context.args) == 0:
-                raise RPCException("Trade-id not set.")
-            trade_id = int(context.args[0])
-            key = None if len(context.args) < 2 else str(context.args[1])
-
-            # logger.warning(f"telegram _list_custom_data - trade_id: {trade_id} - key: {key}")
-            results = self._rpc._rpc_list_custom_data(trade_id, key)
-            # logger.warning(f"telegram _list_custom_data - results: {results}")
-            messages = []
-            head = ["key", "value"]
-            if len(results) > 0:
-                # messages.append("Found custom-data entr" + ("ies: " if len(results) > 1 else "y: "))
-                # for result in results:
-                #     lines = [
-                #         f"*Key:* `{result['cd_key']}` - *Value:* `{result['cd_value']}`",
-                #         # f"*ID:* `{result['id']}`",
-                #         # f"*Trade ID:* `{result['ft_trade_id']}`",
-                #         # f"*Type:* `{result['cd_type']}`",
-                #         # f"*Value:* `{result['cd_value']}`",
-                #         # f"*Create Date:* `{format_date(result['created_at'])}`",
-                #         # f"*Update Date:* `{format_date(result['updated_at'])}`",
-                #     ]
-                #     # Filter empty lines using list-comprehension
-                #     messages.append("\n".join([line for line in lines if line]))
-                # for msg in messages:
-                #     if len(msg) > MAX_MESSAGE_LENGTH:
-                #         msg = "Message dropped because length exceeds "
-                #         msg += f"maximum allowed characters: {MAX_MESSAGE_LENGTH}"
-                #         logger.warning(msg)
-                #     await self._send_msg(msg)
-                for result in results:
-                    messages.append([result['cd_key'], result['cd_value']])
-                message = tabulate(messages, headers=head, tablefmt="simple")
-                final_message = f"<pre>{message}</pre>" + "\n"
-                await self._send_msg(final_message, parse_mode=ParseMode.HTML)
+                # raise RPCException("Trade-id not set.")
+                key = None
+                trades_list = Trade.get_open_trades()
+                for trade in trades_list:
+                    trade_id = trade.id
+                    # logger.warning(f"telegram _list_custom_data - trade_id: {trade_id} - key: {key}")
+                    results = self._rpc._rpc_list_custom_data(trade_id, key)
+                    # logger.warning(f"telegram _list_custom_data - results: {results}")
+                    messages = []
+                    head = ["key", "value"]
+                    if len(results) > 0:
+                        for result in results:
+                            messages.append([result['cd_key'], result['cd_value']])
+                        message = tabulate(messages, headers=head, tablefmt="simple")
+                        final_message = f"<pre>{message}</pre>" + "\n"
+                        await self._send_msg(final_message, parse_mode=ParseMode.HTML)
+                    else:
+                        message = f"Didn't find any custom-data entries for Trade ID: `{trade_id}`"
+                        message += f" and Key: `{key}`." if key is not None else ""
+                        await self._send_msg(message)
             else:
-                message = f"Didn't find any custom-data entries for Trade ID: `{trade_id}`"
-                message += f" and Key: `{key}`." if key is not None else ""
-                await self._send_msg(message)
+                trade_id = int(context.args[0])
+                key = None if len(context.args) < 2 else str(context.args[1])
+    
+                # logger.warning(f"telegram _list_custom_data - trade_id: {trade_id} - key: {key}")
+                results = self._rpc._rpc_list_custom_data(trade_id, key)
+                # logger.warning(f"telegram _list_custom_data - results: {results}")
+                messages = []
+                head = ["key", "value"]
+                if len(results) > 0:
+                    # messages.append("Found custom-data entr" + ("ies: " if len(results) > 1 else "y: "))
+                    # for result in results:
+                    #     lines = [
+                    #         f"*Key:* `{result['cd_key']}` - *Value:* `{result['cd_value']}`",
+                    #         # f"*ID:* `{result['id']}`",
+                    #         # f"*Trade ID:* `{result['ft_trade_id']}`",
+                    #         # f"*Type:* `{result['cd_type']}`",
+                    #         # f"*Value:* `{result['cd_value']}`",
+                    #         # f"*Create Date:* `{format_date(result['created_at'])}`",
+                    #         # f"*Update Date:* `{format_date(result['updated_at'])}`",
+                    #     ]
+                    #     # Filter empty lines using list-comprehension
+                    #     messages.append("\n".join([line for line in lines if line]))
+                    # for msg in messages:
+                    #     if len(msg) > MAX_MESSAGE_LENGTH:
+                    #         msg = "Message dropped because length exceeds "
+                    #         msg += f"maximum allowed characters: {MAX_MESSAGE_LENGTH}"
+                    #         logger.warning(msg)
+                    #     await self._send_msg(msg)
+                    for result in results:
+                        messages.append([result['cd_key'], result['cd_value']])
+                    message = tabulate(messages, headers=head, tablefmt="simple")
+                    final_message = f"<pre>{message}</pre>" + "\n"
+                    await self._send_msg(final_message, parse_mode=ParseMode.HTML)
+                else:
+                    message = f"Didn't find any custom-data entries for Trade ID: `{trade_id}`"
+                    message += f" and Key: `{key}`." if key is not None else ""
+                    await self._send_msg(message)
         except RPCException as e:
             await self._send_msg(str(e))
 

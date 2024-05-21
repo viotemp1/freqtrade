@@ -129,7 +129,7 @@ class AgeFilter(IPairList):
                 )
                 if not self._validate_pair_loc(p, daily_candles):
                     pairlist.remove(p)
-        if self._config.get("runmode", None) not in [RunMode.LIVE]:
+        if self._config.get("runmode", None) not in [RunMode.LIVE, RunMode.DRY_RUN]:
             self.log_once(f"Validated {len(pairlist)} pairs.", logger.info)
         return pairlist
 

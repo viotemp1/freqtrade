@@ -72,7 +72,8 @@ def init_db(db_url: str) -> None:
         )
 
     try:
-        engine = create_engine(db_url, future=True, **kwargs)
+        #engine = create_engine(db_url, future=True, **kwargs)
+        engine = create_engine(db_url, isolation_level="AUTOCOMMIT", future=True, **kwargs)
     except NoSuchModuleError:
         raise OperationalException(
             f"Given value for db_url: '{db_url}' "

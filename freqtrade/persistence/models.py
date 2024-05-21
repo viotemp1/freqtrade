@@ -72,7 +72,8 @@ def init_db(db_url: str) -> None:
         )
 
     try:
-        #engine = create_engine(db_url, future=True, **kwargs)
+        # engine = create_engine(db_url, future=True, **kwargs)
+        # https://docs.sqlalchemy.org/en/20/core/pooling.html#disconnect-handling-pessimistic pool_pre_ping=True
         engine = create_engine(db_url, isolation_level="AUTOCOMMIT", pool_recycle=3600, future=True, **kwargs)
     except NoSuchModuleError:
         raise OperationalException(

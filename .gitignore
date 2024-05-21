@@ -1,5 +1,6 @@
 # Freqtrade rules
 config*.json
+freqtrade/rpc/rpc_old.py
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal

@@ -51,7 +51,7 @@ class RPCException(Exception):
     Should be raised with a rpc-formatted message in an _rpc_* method
     if the required state is wrong, i.e.:
 
-    raise RPCException('*Status:* `no active trade`')
+    raise RPCException('*Status:* `no active trades`')
     """
 
     def __init__(self, message: str) -> None:
@@ -179,7 +179,7 @@ class RPC:
             trades = Trade.get_open_trades()
 
         if not trades:
-            raise RPCException("no active trade")
+            raise RPCException("no active trades")
         else:
             results = []
             for trade in trades:
@@ -274,7 +274,7 @@ class RPC:
         trades: List[Trade] = Trade.get_open_trades()
         nonspot = self._config.get("trading_mode", TradingMode.SPOT) != TradingMode.SPOT
         if not trades:
-            raise RPCException("no active trade")
+            raise RPCException("no active trades")
         else:
             trades_list = []
             pairs_list = []

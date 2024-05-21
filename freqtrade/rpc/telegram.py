@@ -1934,24 +1934,28 @@ class Telegram(RPCHandler):
                 # raise RPCException("Trade-id not set.")
                 key = None
                 trades_list = Trade.get_open_trades()
-                for trade in trades_list:
-                    trade_id = trade.id
-                    trade_pair = trade.pair
-                    # logger.warning(f"telegram _list_custom_data - trade_id: {trade_id} - key: {key}")
-                    results = self._rpc._rpc_list_custom_data(trade_id, key)
-                    # logger.warning(f"telegram _list_custom_data - results: {results}")
-                    messages = []
-                    head = ["key", "value"]
-                    if len(results) > 0:
-                        for result in results:
-                            messages.append([result['cd_key'], result['cd_value']])
-                        message = tabulate(messages, headers=head, tablefmt="simple")
-                        final_message = f"Trade ID: {trade_id} - Pair: {trade_pair}\n<pre>{message}</pre>" + "\n"
-                        await self._send_msg(final_message, parse_mode=ParseMode.HTML)
-                    else:
-                        message = f"Didn't find any custom-data entries for Trade ID: `{trade_id}`"
-                        message += f" and Key: `{key}`." if key is not None else ""
-                        await self._send_msg(message)
+                if len(trades_list) > 0:
+                    for trade in trades_list:
+                        trade_id = trade.id
+                        trade_pair = trade.pair
+                        # logger.warning(f"telegram _list_custom_data - trade_id: {trade_id} - key: {key}")
+                        results = self._rpc._rpc_list_custom_data(trade_id, key)
+                        # logger.warning(f"telegram _list_custom_data - results: {results}")
+                        messages = []
+                        head = ["key", "value"]
+                        if len(results) > 0:
+                            for result in results:
+                                messages.append([result['cd_key'], result['cd_value']])
+                            message = tabulate(messages, headers=head, tablefmt="simple")
+                            final_message = f"Trade ID: {trade_id} - Pair: {trade_pair}\n<pre>{message}</pre>" + "\n"
+                            await self._send_msg(final_message, parse_mode=ParseMode.HTML)
+                        else:
+                            message = f"Didn't find any custom-data entries for Trade ID: `{trade_id}`"
+                            message += f" and Key: `{key}`." if key is not None else ""
+                            await self._send_msg(message)
+                else:
+                    await self._send_msg("no active trades", parse_mode=ParseMode.HTML)
+                
             else:
                 trade_id = int(context.args[0])
                 key = None if len(context.args) < 2 else str(context.args[1])

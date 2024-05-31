@@ -482,6 +482,7 @@ class Hyperopt:
             "results_metrics": strat_stats,
             "results_explanation": results_explanation,
             "total_profit": total_profit,
+            "runtime_s": backtesting_results["backtest_end_time"] - backtesting_results["backtest_start_time"]
         }
 
     def get_optimizer(self, dimensions: List[Dimension], cpu_count) -> Optimizer:

@@ -20,6 +20,7 @@ build_helpers/ta-lib/*
 
 # Macos related
 .DS_Store
+*.whl
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

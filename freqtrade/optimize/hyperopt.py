@@ -53,6 +53,7 @@ from freqtrade.optimize.hyperopt_tools import (
 from freqtrade.optimize.optimize_reports import generate_strategy_stats
 from freqtrade.resolvers.hyperopt_resolver import HyperOptLossResolver
 import numpy as np
+from line_profiler import profile
 
 # Suppress scikit-learn FutureWarnings from skopt
 with warnings.catch_warnings():
@@ -358,6 +359,7 @@ class Hyperopt:
                 # noinspection PyProtectedMember
                 attr.value = params_dict[attr_name]
 
+    @profile
     def generate_optimizer(self, raw_params: List[Any]) -> Dict[str, Any]:
         """
         Used Optimize function.
@@ -365,7 +367,6 @@ class Hyperopt:
         Keep this function as optimized as possible!
         """
         HyperoptStateContainer.set_state(HyperoptState.OPTIMIZE)
-        backtest_start_time = datetime.now(timezone.utc)
         params_dict = self._get_params_dict(self.dimensions, raw_params)
 
         # Apply parameters
@@ -420,20 +421,21 @@ class Hyperopt:
                 # Data is not yet analyzed, rerun populate_indicators.
                 processed = self.advise_and_trim(processed)
 
+        backtest_start_time = datetime.now(timezone.utc)
         bt_results = self.backtesting.backtest(
             processed=processed, start_date=self.min_date, end_date=self.max_date
         )
         backtest_end_time = datetime.now(timezone.utc)
+
         bt_results.update(
             {
                 "backtest_start_time": int(backtest_start_time.timestamp()),
                 "backtest_end_time": int(backtest_end_time.timestamp()),
             }
         )
-
         return self._get_results_dict(
-            bt_results, self.min_date, self.max_date, params_dict, processed=processed
-        )
+                    bt_results, self.min_date, self.max_date, params_dict, processed=processed
+                )
 
     def _get_results_dict(
         self, backtesting_results, min_date, max_date, params_dict, processed: Dict[str, DataFrame]

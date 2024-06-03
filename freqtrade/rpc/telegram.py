@@ -1945,7 +1945,7 @@ class Telegram(RPCHandler):
                         head = ["key", "value"]
                         if len(results) > 0:
                             for result in results:
-                                logger.warning(f"telegram _list_custom_data - results: {result['cd_value']} / t{ype(result['cd_value'])}")
+                                logger.warning(f"telegram _list_custom_data - results: {result['cd_value']} / {type(result['cd_value'])}")
                                 if isinstance(result['cd_value'], float):
                                     messages.append([result['cd_key'], f"{(result['cd_value']):.4f}"])
                                 else:

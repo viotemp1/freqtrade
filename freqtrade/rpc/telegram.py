@@ -1945,7 +1945,10 @@ class Telegram(RPCHandler):
                         head = ["key", "value"]
                         if len(results) > 0:
                             for result in results:
-                                messages.append([result['cd_key'], result['cd_value']])
+                                if isinstance(result['cd_value'], float):
+                                    messages.append([result['cd_key'], f"{(result['cd_value']:.4f)}"])
+                                else:
+                                    messages.append([result['cd_key'], result['cd_value']])
                             message = tabulate(messages, headers=head, tablefmt="simple")
                             final_message = f"Trade ID: {trade_id} - Pair: {trade_pair}\n<pre>{message}</pre>" + "\n"
                             await self._send_msg(final_message, parse_mode=ParseMode.HTML)

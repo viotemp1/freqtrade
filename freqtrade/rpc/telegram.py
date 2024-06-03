@@ -115,6 +115,11 @@ def authorized_only(command_handler: Callable[..., Coroutine[Any, Any, None]]):
 
     return wrapper
 
+def is_numeric(f):
+    if re.match(r'^-?\d+(?:\.\d+)$', str(f)) is not None:
+        return True
+    else:
+        return False
 
 class Telegram(RPCHandler):
     """This class handles all telegram communication"""
@@ -1945,8 +1950,7 @@ class Telegram(RPCHandler):
                         head = ["key", "value"]
                         if len(results) > 0:
                             for result in results:
-                                logger.warning(f"telegram _list_custom_data - results: {result['cd_value']} / {type(result['cd_value'])}")
-                                if isinstance(result['cd_value'], float):
+                                if isinstance(result['cd_value'], float) or is_numeric(result['cd_value']):
                                     messages.append([result['cd_key'], f"{(result['cd_value']):.4f}"])
                                 else:
                                     messages.append([result['cd_key'], result['cd_value']])

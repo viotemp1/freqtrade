@@ -1946,7 +1946,7 @@ class Telegram(RPCHandler):
                         if len(results) > 0:
                             for result in results:
                                 if isinstance(result['cd_value'], float):
-                                    messages.append([result['cd_key'], f"{(result['cd_value']:.4f)}"])
+                                    messages.append([result['cd_key'], f"{(result['cd_value']):.4f}"])
                                 else:
                                     messages.append([result['cd_key'], result['cd_value']])
                             message = tabulate(messages, headers=head, tablefmt="simple")

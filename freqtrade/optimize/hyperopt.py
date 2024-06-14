@@ -503,6 +503,7 @@ class Hyperopt:
             base_estimator=estimator,
             acq_optimizer=acq_optimizer,
             n_initial_points=INITIAL_POINTS,
+            initial_point_generator="halton", # random(default) sobol halton hammersly lhs grid
             acq_optimizer_kwargs={"n_jobs": cpu_count},
             random_state=self.random_state,
             model_queue_size=SKOPT_MODEL_QUEUE_SIZE,

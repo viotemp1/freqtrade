@@ -45,6 +45,7 @@ from freqtrade.optimize.hyperopt_tools import (
     HyperoptTools,
     hyperopt_serializer,
 )
+from freqtrade.optimize.space import Categorical, Integer, SKDecimal
 from freqtrade.optimize.optimize_reports import generate_strategy_stats
 from freqtrade.resolvers.hyperopt_resolver import HyperOptLossResolver
 
@@ -52,17 +53,20 @@ from freqtrade.resolvers.hyperopt_resolver import HyperOptLossResolver
 # Suppress scikit-learn FutureWarnings from skopt
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=FutureWarning)
-    from skopt import Optimizer
+    # from skopt import Optimizer
+    import skopt # keept for skopt spaces
+    import optuna
+    from freqtrade.optimize.optuna_pruners import MultiplePruners, RepeatPruner
     from skopt.space import Dimension
 
 logger = logging.getLogger(__name__)
 
 
-INITIAL_POINTS = 30
+# INITIAL_POINTS = 30
 
 # Keep no more than SKOPT_MODEL_QUEUE_SIZE models
 # in the skopt model queue, to optimize memory consumption
-SKOPT_MODEL_QUEUE_SIZE = 10
+# SKOPT_MODEL_QUEUE_SIZE = 10
 
 MAX_LOSS = 100000  # just a big enough number to be bad result in loss optimization
 
@@ -459,28 +463,59 @@ class Hyperopt:
             "results_metrics": strat_stats,
             "results_explanation": results_explanation,
             "total_profit": total_profit,
+            "runtime_s": backtesting_results["backtest_end_time"] - backtesting_results["backtest_start_time"]
         }
 
-    def get_optimizer(self, dimensions: List[Dimension], cpu_count) -> Optimizer:
-        estimator = self.custom_hyperopt.generate_estimator(dimensions=dimensions)
+    def get_optimizer(self, dimensions: List[Dimension], cpu_count) -> optuna.study.Study:
+        # estimator = self.custom_hyperopt.generate_estimator(dimensions=dimensions)
 
-        acq_optimizer = "sampling"
-        if isinstance(estimator, str):
-            if estimator not in ("GP", "RF", "ET", "GBRT"):
-                raise OperationalException(f"Estimator {estimator} not supported.")
-            else:
-                acq_optimizer = "auto"
+        # acq_optimizer = "sampling"
+        # if isinstance(estimator, str):
+        #     if estimator not in ("GP", "RF", "ET", "GBRT"):
+        #         raise OperationalException(f"Estimator {estimator} not supported.")
+        #     else:
+        #         acq_optimizer = "auto"
 
-        logger.info(f"Using estimator {estimator}.")
-        return Optimizer(
-            dimensions,
-            base_estimator=estimator,
-            acq_optimizer=acq_optimizer,
-            n_initial_points=INITIAL_POINTS,
-            acq_optimizer_kwargs={"n_jobs": cpu_count},
-            random_state=self.random_state,
-            model_queue_size=SKOPT_MODEL_QUEUE_SIZE,
-        )
+        # logger.info(f"Using estimator {estimator}.")
+        # return Optimizer(
+        #     dimensions,
+        #     base_estimator=estimator,
+        #     acq_optimizer=acq_optimizer,
+        #     n_initial_points=INITIAL_POINTS,
+        #     acq_optimizer_kwargs={"n_jobs": cpu_count},
+        #     random_state=self.random_state,
+        #     model_queue_size=SKOPT_MODEL_QUEUE_SIZE,
+        # )
+        sampler_strategy  = self.custom_hyperopt.generate_estimator(dimensions=dimensions)
+        if isinstance(sampler_strategy, str):
+            if sampler_strategy not in ("RandomSampler", "TPESampler", "CmaEsSampler", "NSGAIISampler", "NSGAIIISampler", "QMCSampler", "GPSampler", "BoTorchSampler", "BruteForceSampler"): # GridSampler
+                raise OperationalException(f"Sampler {sampler_strategy} not supported.")
+            elif sampler_strategy == "RandomSampler":
+                sampler = optuna.samplers.RandomSampler(seed=self.random_state)
+            elif sampler_strategy == "TPESampler":
+                sampler = optuna.samplers.TPESampler(seed=self.random_state)
+            elif sampler_strategy == "CmaEsSampler":
+                sampler = optuna.samplers.CmaEsSampler(seed=self.random_state, warn_independent_sampling=False)
+            elif sampler_strategy == "NSGAIISampler":
+                sampler = optuna.samplers.NSGAIISampler(seed=self.random_state)
+            elif sampler_strategy == "NSGAIIISampler":
+                sampler = optuna.samplers.NSGAIIISampler(seed=self.random_state)
+            elif sampler_strategy == "QMCSampler":
+                sampler = optuna.samplers.QMCSampler(seed=self.random_state, warn_independent_sampling=False)
+            elif sampler_strategy == "GPSampler":
+                sampler = optuna.samplers.GPSampler(seed=self.random_state)
+            elif sampler_strategy == "BoTorchSampler":
+                sampler = optuna.integration.BoTorchSampler(seed=self.random_state)
+            elif sampler_strategy == "BruteForceSampler":
+                sampler = optuna.samplers.BruteForceSampler(seed=self.random_state)
+        else:
+            sampler = sampler_strategy
+
+        logger.info(f"Using sampler {sampler_strategy}")
+        optuna.logging.set_verbosity(optuna.logging.WARNING)
+        return optuna.create_study(sampler=sampler, pruner=RepeatPruner(), direction="minimize", storage=None, study_name=None, load_if_exists=False) 
+        # change in the future to suport resume
+        # https://optuna.readthedocs.io/en/stable/tutorial/20_recipes/001_rdb.html#rdb
 
     def run_optimizer_parallel(self, parallel: Parallel, asked: List[List]) -> List[Dict[str, Any]]:
         """Start optimizer in a parallel way"""
@@ -527,61 +562,80 @@ class Hyperopt:
         else:
             dump(data, self.data_pickle_file)
 
-    def get_asked_points(self, n_points: int) -> Tuple[List[List[Any]], List[bool]]:
-        """
-        Enforce points returned from `self.opt.ask` have not been already evaluated
+    def get_asked_points(self, n_points: int, trial_numbers: List) -> Tuple[List[List[Any]], List[bool]]:
+        # """
+        # Enforce points returned from `self.opt.ask` have not been already evaluated
+        # https://stackoverflow.com/questions/58820574/how-to-sample-parameters-without-duplicates-in-optuna
 
-        Steps:
-        1. Try to get points using `self.opt.ask` first
-        2. Discard the points that have already been evaluated
-        3. Retry using `self.opt.ask` up to 3 times
-        4. If still some points are missing in respect to `n_points`, random sample some points
-        5. Repeat until at least `n_points` points in the `asked_non_tried` list
-        6. Return a list with length truncated at `n_points`
-        """
+        # Steps:
+        # 1. Try to get points using `self.opt.ask` first
+        # 2. Discard the points that have already been evaluated
+        # 3. Retry using `self.opt.ask` up to 3 times
+        # 4. If still some points are missing in respect to `n_points`, random sample some points
+        # 5. Repeat until at least `n_points` points in the `asked_non_tried` list
+        # 6. Return a list with length truncated at `n_points`
+        # """
 
-        def unique_list(a_list):
-            new_list = []
-            for item in a_list:
-                if item not in new_list:
-                    new_list.append(item)
-            return new_list
+        # def unique_list(a_list):
+        #     new_list = []
+        #     for item in a_list:
+        #         if item not in new_list:
+        #             new_list.append(item)
+        #     return new_list
 
-        i = 0
-        asked_non_tried: List[List[Any]] = []
-        is_random_non_tried: List[bool] = []
-        while i < 5 and len(asked_non_tried) < n_points:
-            if i < 3:
-                self.opt.cache_ = {}
-                asked = unique_list(self.opt.ask(n_points=n_points * 5 if i > 0 else n_points))
-                is_random = [False for _ in range(len(asked))]
-            else:
-                asked = unique_list(self.opt.space.rvs(n_samples=n_points * 5))
-                is_random = [True for _ in range(len(asked))]
-            is_random_non_tried += [
-                rand
-                for x, rand in zip(asked, is_random)
-                if x not in self.opt.Xi and x not in asked_non_tried
-            ]
-            asked_non_tried += [
-                x for x in asked if x not in self.opt.Xi and x not in asked_non_tried
-            ]
-            i += 1
+        # i = 0
+        # asked_non_tried: List[List[Any]] = []
+        # is_random_non_tried: List[bool] = []
+        # while i < 5 and len(asked_non_tried) < n_points:
+        #     if i < 3:
+        #         self.opt.cache_ = {}
+        #         asked = unique_list(self.opt.ask(n_points=n_points * 5 if i > 0 else n_points))
+        #         is_random = [False for _ in range(len(asked))]
+        #     else:
+        #         asked = unique_list(self.opt.space.rvs(n_samples=n_points * 5))
+        #         is_random = [True for _ in range(len(asked))]
+        #     is_random_non_tried += [
+        #         rand
+        #         for x, rand in zip(asked, is_random)
+        #         if x not in self.opt.Xi and x not in asked_non_tried
+        #     ]
+        #     asked_non_tried += [
+        #         x for x in asked if x not in self.opt.Xi and x not in asked_non_tried
+        #     ]
+        #     i += 1
 
-        if asked_non_tried:
-            return (
-                asked_non_tried[: min(len(asked_non_tried), n_points)],
-                is_random_non_tried[: min(len(asked_non_tried), n_points)],
-            )
-        else:
-            return self.opt.ask(n_points=n_points), [False for _ in range(n_points)]
+        # if asked_non_tried:
+        #     return (
+        #         asked_non_tried[: min(len(asked_non_tried), n_points)],
+        #         is_random_non_tried[: min(len(asked_non_tried), n_points)],
+        #     )
+        # else:
+        #     return self.opt.ask(n_points=n_points), [False for _ in range(n_points)]
+        asked_result = []
+        for _ in range(n_points):
+            trial = self.opt.ask()
+            trial_numbers.append(trial.number)
+            asked = []
+            for original_dim in self.dimensions:
+                if isinstance(original_dim, Integer) or isinstance(original_dim, skopt.space.space.Integer):
+                    asked.append(trial.suggest_int(original_dim.name, original_dim.low, original_dim.high))
+                elif isinstance(original_dim, SKDecimal):
+                    asked.append(trial.suggest_float(original_dim.name, original_dim.low_orig, original_dim.high_orig, step=1/pow(10, original_dim.decimals)))
+                elif isinstance(original_dim, Categorical):
+                    asked.append(trial.suggest_categorical(original_dim.name, list(original_dim.bounds)))
+                else:
+                    raise Exception(f"Unknown optimization paramater {original_dim} / {type(original_dim)}")
+            if len(self.opt.get_trials(deepcopy=False)) > 1 and not trial.should_prune():
+                asked_result.append(asked)
+            return asked_result, trial_numbers, [False for _ in range(n_points)]
+
 
     def evaluate_result(self, val: Dict[str, Any], current: int, is_random: bool):
         """
         Evaluate results returned from generate_optimizer
         """
         val["current_epoch"] = current
-        val["is_initial_point"] = current <= INITIAL_POINTS
+        val["is_initial_point"] = False # current <= INITIAL_POINTS
 
         logger.debug("Optimizer epoch evaluated: %s", val)
 
@@ -625,6 +679,9 @@ class Hyperopt:
         logger.info(f"Number of parallel jobs set as: {config_jobs}")
 
         self.opt = self.get_optimizer(self.dimensions, config_jobs)
+        # print(self.dimensions)
+        # for i in self.dimensions:
+        #     print(i, type(i))
 
         if self.print_colorized:
             colorama_init(autoreset=True)
@@ -653,30 +710,54 @@ class Hyperopt:
                     if self.analyze_per_epoch:
                         # First analysis not in parallel mode when using --analyze-per-epoch.
                         # This allows dataprovider to load it's informative cache.
-                        asked, is_random = self.get_asked_points(n_points=1)
+                        trial_numbers = []
+                        asked, trial_numbers, is_random = self.get_asked_points(n_points=1, trial_numbers=trial_numbers)
                         f_val0 = self.generate_optimizer(asked[0])
-                        self.opt.tell(asked, [f_val0["loss"]])
+                        for trial_number, objective in zip(trial_numbers, f_val0):
+                            self.opt.tell(trial_number, objective["loss"])
+                        # self.opt.tell(asked, [f_val0["loss"]])
                         self.evaluate_result(f_val0, 1, is_random[0])
                         pbar.update(task, advance=1)
                         start += 1
 
                     evals = ceil((self.total_epochs - start) / jobs)
                     for i in range(evals):
+                        trial_numbers = []
                         # Correct the number of epochs to be processed for the last
                         # iteration (should not exceed self.total_epochs in total)
                         n_rest = (i + 1) * jobs - (self.total_epochs - start)
                         current_jobs = jobs - n_rest if n_rest > 0 else jobs
+                        # print("current_jobs", current_jobs)
 
-                        asked, is_random = self.get_asked_points(n_points=current_jobs)
+                        batch_start_time = datetime.now(timezone.utc)
+                        opt_ask_start_time = datetime.now(timezone.utc)
+                        asked, trial_numbers, is_random = self.get_asked_points(n_points=current_jobs, trial_numbers=trial_numbers)
+                        opt_ask_end_time = datetime.now(timezone.utc)
+                        opt_ask_runtime = int(opt_ask_end_time.timestamp())-int(opt_ask_start_time.timestamp())
+                        # print("asked", asked, trial_numbers)
                         f_val = self.run_optimizer_parallel(parallel, asked)
-                        self.opt.tell(asked, [v["loss"] for v in f_val])
+                        opt_tell_start_time = datetime.now(timezone.utc)
+                        for trial_number, objective in zip(trial_numbers, f_val):
+                            self.opt.tell(trial_number, objective["loss"])
+                        opt_tell_end_time = datetime.now(timezone.utc)
+                        opt_tell_runtime = int(opt_tell_end_time.timestamp())-int(opt_tell_start_time.timestamp())
 
+                        backtest_runtime_list = []
+                        total_profit_list = []
                         for j, val in enumerate(f_val):
                             # Use human-friendly indexes here (starting from 1)
                             current = i * jobs + j + 1 + start
-
+                            backtest_runtime_list.append(val["runtime_s"])
                             self.evaluate_result(val, current, is_random[j])
+                            total_profit_list.append(val["total_profit"])
                             pbar.update(task, advance=1)
+
+                        if len(total_profit_list) == 0:
+                            total_profit_list = [-1]
+                        batch_end_time = datetime.now(timezone.utc)
+                        batch_runtime = int(batch_end_time.timestamp())-int(batch_start_time.timestamp())
+                        with open('runtime.csv', 'a+') as f:
+                            f.write(f"{sum(backtest_runtime_list)},{opt_ask_runtime},{opt_tell_runtime},{batch_runtime},{max(total_profit_list)}\n")
 
         except KeyboardInterrupt:
             print("User interrupted..")

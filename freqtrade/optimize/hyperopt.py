@@ -859,11 +859,17 @@ class myExperimentPlateauStopper:
             if result < self._best_result * self._perc:
                 self._best_result = result
                 self._best_epoch = epoch
+                self._iterations_noinc = 0
+            else:
+                self._iterations_noinc += 1
         else:
             self._top_values = sorted(self._top_values)[-self._top :]
             if result > self._best_result * self._perc:
                 self._best_result = result
                 self._best_epoch = epoch
+                self._iterations_noinc = 0
+            else:
+                self._iterations_noinc += 1
 
         std_value = abs(np.std(self._top_values) / np.mean(self._top_values))
 
@@ -876,12 +882,6 @@ class myExperimentPlateauStopper:
         else:
             # otherwise we reset the counter
             self._iterations_plateau = 0
-        if no_increase:
-            # we increment the total counter of iterations
-            self._iterations_noinc += 1
-        else:
-            # otherwise we reset the counter
-            self._iterations_noinc = 0
 
         # and then call the method that re-executes
         # the checks, including the iterations.

@@ -83,6 +83,7 @@ with warnings.catch_warnings():
 ray_results_table_max_rows = -1  # -1 - half screen
 ray_reuse_actors = False
 ray_early_stop_enable = True
+ray_early_stop_perc = 0.001
 ray_early_stop_std = 0.01
 ray_early_stop_top = 10
 ray_early_stop_patience = 0.1  # 1/5 from total epochs
@@ -890,6 +891,7 @@ class Hyperopt:
             if ray_early_stop_enable:
                 stop_cb = ExperimentPlateauStopper(
                     "loss",
+                    perc=ray_early_stop_perc,
                     std=ray_early_stop_std,
                     top=ray_early_stop_top,
                     mode="min",
@@ -1309,6 +1311,7 @@ class ExperimentPlateauStopper(Stopper):
     def __init__(
         self,
         metric: str,
+        perc: float = 0.001,
         std: float = 0.001,
         top: int = 10,
         mode: str = "min",
@@ -1332,13 +1335,15 @@ class ExperimentPlateauStopper(Stopper):
         self._patience = patience
         self._iterations_plateau = 0
         self._iterations_noinc = 0
+        self._perc = perc if perc > 1 else perc + 1.0
         self._std = std
         self._top = top
         self._top_values = []
         self._best_epoch = 0
         self._current_epoch = 0
-        self._best_result = 0
+        self._best_result = np.inf if mode == "min" else -np.inf
         self._trials_ids = []
+        self._last_result = 0
 
     def __call__(self, trial_id, result):
         """Return a boolean representing if the tuning has to stop."""
@@ -1347,17 +1352,24 @@ class ExperimentPlateauStopper(Stopper):
             self._trials_ids.append(trial_id)
             self._current_epoch += 1
             result_metric = result[self._metric]
+            self._last_result = result_metric
             self._top_values.append(result_metric)
             if self._mode == "min":
                 self._top_values = sorted(self._top_values)[: self._top]
-                if result_metric < self._best_result:
+                if result_metric < self._best_result * self._perc:
                     self._best_result = result_metric
                     self._best_epoch = self._current_epoch
+                    self._iterations_noinc = 0
+                else:
+                    self._iterations_noinc += 1
             else:
                 self._top_values = sorted(self._top_values)[-self._top :]
-                if result_metric > self._best_result:
+                if result_metric > self._best_result * self._perc:
                     self._best_result = result_metric
                     self._best_epoch = self._current_epoch
+                    self._iterations_noinc = 0
+                else:
+                    self._iterations_noinc += 1
 
             std_value = abs(np.std(self._top_values) / np.mean(self._top_values))
 
@@ -1370,12 +1382,6 @@ class ExperimentPlateauStopper(Stopper):
             else:
                 # otherwise we reset the counter
                 self._iterations_plateau = 0
-            if no_increase:
-                # we increment the total counter of iterations
-                self._iterations_noinc += 1
-            else:
-                # otherwise we reset the counter
-                self._iterations_noinc = 0
 
             # and then call the method that re-executes
             # the checks, including the iterations.
@@ -1392,9 +1398,10 @@ class ExperimentPlateauStopper(Stopper):
 
             if stop_all:
                 logger.info(
-                    f"myExperimentPlateauStopper - _current_epoch: {self._current_epoch} / _best_epoch: {self._best_epoch} / "
-                    f"_iterations_plateau: {self._iterations_plateau}/_iterations_noinc:{self._iterations_noinc}/{self._patience} / "
-                    f"has_plateaued: {has_plateaued} / no_increase: {no_increase} / stop_all: {stop_all} / std: {std_value}"
+                    f"myExperimentPlateauStopper - current_epoch: {self._current_epoch} / best_epoch: {self._best_epoch} / "
+                    f"iterations_plateau: {self._iterations_plateau}/ iterations_noinc:{self._iterations_noinc} / patience: {self._patience} / "
+                    f"has_plateaued: {has_plateaued} / no_increase: {no_increase} / stop_all: {stop_all} / std: {std_value} / "
+                    f"last_result: {self._last_result} / best_result: {self._best_result}"
                 )
         return stop_all
 

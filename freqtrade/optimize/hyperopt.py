@@ -256,9 +256,11 @@ class Hyperopt:
             result["trailing"] = self.custom_hyperopt.generate_trailing_params(params)
         if HyperoptTools.has_space(self.config, "trades"):
             result["max_open_trades"] = {
-                "max_open_trades": self.backtesting.strategy.max_open_trades
-                if self.backtesting.strategy.max_open_trades != float("inf")
-                else -1
+                "max_open_trades": (
+                    self.backtesting.strategy.max_open_trades
+                    if self.backtesting.strategy.max_open_trades != float("inf")
+                    else -1
+                )
             }
 
         return result
@@ -390,7 +392,9 @@ class Hyperopt:
         if HyperoptTools.has_space(self.config, "trailing"):
             d = self.custom_hyperopt.generate_trailing_params(params_dict)
             self.backtesting.strategy.trailing_stop = d["trailing_stop"]
-            self.backtesting.strategy.trailing_stop_positive = d["trailing_stop_positive"]
+            self.backtesting.strategy.trailing_stop_positive = d[
+                "trailing_stop_positive"
+            ]
             self.backtesting.strategy.trailing_stop_positive_offset = d[
                 "trailing_stop_positive_offset"
             ]
@@ -400,14 +404,18 @@ class Hyperopt:
 
         if HyperoptTools.has_space(self.config, "trades"):
             if self.config["stake_amount"] == "unlimited" and (
-                params_dict["max_open_trades"] == -1 or params_dict["max_open_trades"] == 0
+                params_dict["max_open_trades"] == -1
+                or params_dict["max_open_trades"] == 0
             ):
                 # Ignore unlimited max open trades if stake amount is unlimited
                 params_dict.update({"max_open_trades": self.config["max_open_trades"]})
 
             updated_max_open_trades = (
                 int(params_dict["max_open_trades"])
-                if (params_dict["max_open_trades"] != -1 and params_dict["max_open_trades"] != 0)
+                if (
+                    params_dict["max_open_trades"] != -1
+                    and params_dict["max_open_trades"] != 0
+                )
                 else float("inf")
             )
 
@@ -434,11 +442,16 @@ class Hyperopt:
             }
         )
         return self._get_results_dict(
-                    bt_results, self.min_date, self.max_date, params_dict, processed=processed
-                )
+            bt_results, self.min_date, self.max_date, params_dict, processed=processed
+        )
 
     def _get_results_dict(
-        self, backtesting_results, min_date, max_date, params_dict, processed: Dict[str, DataFrame]
+        self,
+        backtesting_results,
+        min_date,
+        max_date,
+        params_dict,
+        processed: Dict[str, DataFrame],
     ) -> Dict[str, Any]:
         params_details = self._get_params_details(params_dict)
 
@@ -484,7 +497,8 @@ class Hyperopt:
             "results_metrics": strat_stats,
             "results_explanation": results_explanation,
             "total_profit": total_profit,
-            "runtime_s": backtesting_results["backtest_end_time"] - backtesting_results["backtest_start_time"]
+            "runtime_s": backtesting_results["backtest_end_time"]
+            - backtesting_results["backtest_start_time"],
         }
 
     def get_optimizer(self, dimensions: List[Dimension], cpu_count) -> Optimizer:
@@ -503,16 +517,19 @@ class Hyperopt:
             base_estimator=estimator,
             acq_optimizer=acq_optimizer,
             n_initial_points=INITIAL_POINTS,
-            initial_point_generator="halton", # random(default) sobol halton hammersly lhs grid
+            initial_point_generator="halton",  # random(default) sobol halton hammersly lhs grid
             acq_optimizer_kwargs={"n_jobs": cpu_count},
             random_state=self.random_state,
             model_queue_size=SKOPT_MODEL_QUEUE_SIZE,
         )
 
-    def run_optimizer_parallel(self, parallel: Parallel, asked: List[List]) -> List[Dict[str, Any]]:
+    def run_optimizer_parallel(
+        self, parallel: Parallel, asked: List[List]
+    ) -> List[Dict[str, Any]]:
         """Start optimizer in a parallel way"""
         return parallel(
-            delayed(wrap_non_picklable_objects(self.generate_optimizer))(v) for v in asked
+            delayed(wrap_non_picklable_objects(self.generate_optimizer))(v)
+            for v in asked
         )
 
     def _set_random_state(self, random_state: Optional[int]) -> int:
@@ -641,7 +658,9 @@ class Hyperopt:
             return False
 
     def start(self) -> None:
-        self.random_state = self._set_random_state(self.config.get("hyperopt_random_state"))
+        self.random_state = self._set_random_state(
+            self.config.get("hyperopt_random_state")
+        )
         logger.info(f"Using optimizer random state: {self.random_state}")
         self.hyperopt_table_header = -1
         # Initialize spaces ...
@@ -651,9 +670,10 @@ class Hyperopt:
 
         self.experiment_plateau_stopper = myExperimentPlateauStopper(
             mode="min",
-            std=0.001,
+            perc=0.001,
+            std=0.01,
             top=10,
-            patience=max(100, self.total_epochs // 5),
+            patience=int(0.2 * self.total_epochs),
         )
 
         # We don't need exchange instance anymore while running hyperopt
@@ -748,7 +768,9 @@ class Hyperopt:
 
         if self.current_best_epoch:
             HyperoptTools.try_export_params(
-                self.config, self.backtesting.strategy.get_strategy_name(), self.current_best_epoch
+                self.config,
+                self.backtesting.strategy.get_strategy_name(),
+                self.current_best_epoch,
             )
 
             HyperoptTools.show_epoch_details(
@@ -793,7 +815,12 @@ class myExperimentPlateauStopper:
     """
 
     def __init__(
-        self, std: float = 0.001, top: int = 10, mode: str = "min", patience: int = 100
+        self,
+        perc: float = 0.001,
+        std: float = 0.001,
+        top: int = 10,
+        mode: str = "min",
+        patience: int = 100,
     ):
         if mode not in ("min", "max"):
             raise ValueError("The mode parameter can only be either min or max.")
@@ -810,26 +837,31 @@ class myExperimentPlateauStopper:
             )
         self._mode = mode
         self._patience = patience
-        self._iterations = 0
+        self._iterations_plateau = 0
+        self._iterations_noinc = 0
         self._std = std
+        self._perc = perc if perc > 1 else perc + 1.0
+        # self._perc = self._perc if mode == "max" else 2 - self._perc
         self._top = top
         self._top_values = []
         self._best_epoch = 0
         self._current_epoch = 0
-        self._best_result = 0
+        self._best_result = np.inf if mode == "min" else -np.inf
+        self._last_result = 0
 
     def __call__(self, result, epoch):
         """Return a boolean representing if the tuning has to stop."""
         self._top_values.append(result)
+        self._last_result = result
         self._current_epoch = epoch
         if self._mode == "min":
             self._top_values = sorted(self._top_values)[: self._top]
-            if result < self._best_result:
+            if result < self._best_result * self._perc:
                 self._best_result = result
                 self._best_epoch = epoch
         else:
             self._top_values = sorted(self._top_values)[-self._top :]
-            if result > self._best_result:
+            if result > self._best_result * self._perc:
                 self._best_result = result
                 self._best_epoch = epoch
 
@@ -840,31 +872,38 @@ class myExperimentPlateauStopper:
         no_increase = self.no_increase()
         if has_plateaued:
             # we increment the total counter of iterations
-            self._iterations += 1
+            self._iterations_plateau += 1
         else:
             # otherwise we reset the counter
-            self._iterations = 0
-        if not no_increase:
-            self._iterations = 0
+            self._iterations_plateau = 0
+        if no_increase:
+            # we increment the total counter of iterations
+            self._iterations_noinc += 1
+        else:
+            # otherwise we reset the counter
+            self._iterations_noinc = 0
 
         # and then call the method that re-executes
         # the checks, including the iterations.
         stop_all = self.stop_all()
         if stop_all:
             logger.warning(
-                f"myExperimentPlateauStopper - epoch: {epoch} / _iterations: {self._iterations}/{self._patience} / has_plateaued: {has_plateaued} / no_increase: {no_increase} / stop_all: {stop_all} / std: {std_value}"
+                f"myExperimentPlateauStopper - best_epoch: {self._best_epoch} / epoch: {epoch} / iterations_plateau: {self._iterations_plateau} / iterations_noinc: {self._iterations_noinc} / {self._patience} / has_plateaued: {has_plateaued} / no_increase: {no_increase} / stop_all: {stop_all} / std: {std_value} / last_result: {self._last_result} / best_result: {self._best_result}"
             )
-            logger.warning(
-                f"myExperimentPlateauStopper - _current_epoch: {self._current_epoch} / _best_epoch: {self._best_epoch} / _patience: {self._patience}"
-            )
-            logger.warning(f"myExperimentPlateauStopper - {self._top_values}")
+            # logger.warning(
+            #     f"myExperimentPlateauStopper - _current_epoch: {self._current_epoch} / _best_epoch: {self._best_epoch} / _patience: {self._patience}"
+            # )
+            # logger.warning(f"myExperimentPlateauStopper - {self._top_values}")
         return stop_all
 
     def no_increase(self):
-        return (
-            self._current_epoch - self._best_epoch
-            > self._patience  # 3 * self._patience
-        )
+        # if self._best_result == 0:
+        #     result = False
+        # else:
+        #     result = abs(self._last_result / self._best_result) < self._perc and (
+        #         self._current_epoch - self._best_epoch > self._patience
+        #     )
+        return self._current_epoch - self._best_epoch > self._patience
 
     def has_plateaued(self):
         return (
@@ -874,6 +913,6 @@ class myExperimentPlateauStopper:
 
     def stop_all(self):
         """Return whether to stop and prevent trials from starting."""
-        return (self.has_plateaued() and self._iterations >= self._patience) or (
-            self.no_increase()
-        )
+        return (
+            self.has_plateaued() and self._iterations_plateau >= self._patience
+        ) or (self.no_increase())

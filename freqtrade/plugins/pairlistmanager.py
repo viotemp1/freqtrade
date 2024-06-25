@@ -18,7 +18,11 @@ from freqtrade.mixins import LoggingMixin
 from freqtrade.plugins.pairlist.IPairList import IPairList, SupportsBacktesting
 from freqtrade.plugins.pairlist.pairlist_helpers import expand_pairlist
 from freqtrade.resolvers import PairListResolver
+from freqtrade.enums import RunMode
 
+import os
+from datetime import datetime
+import cloudpickle
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +38,20 @@ class PairListManager(LoggingMixin):
         self._pairlist_handlers: List[IPairList] = []
         self._tickers_needed = False
         self._dataprovider: Optional[DataProvider] = dataprovider
-        for pairlist_handler_config in self._config.get("pairlists", []):
+
+        if not os.path.isdir("./tmp"):
+            os.mkdir("./tmp")
+        self.file_cache_ttl = config.get('file_cache_ttl', 86400)
+        strategy1 = config.get("strategy", "")
+        if strategy1 is not None and len(strategy1) > 0 and strategy1.find("_") >= 0:
+            strategy1 = strategy1.split("_")
+            if len(strategy1) >= 2:
+                strategy1 = strategy1[0] + "_" + strategy1[1]
+            else:
+                strategy1 = strategy1[0]
+        self.pairlist_filename = f"tmp/PairListManager_pairlists_{strategy1}.pkl"
+
+        for pairlist_handler_config in self._config.get('pairlists', []):
             pairlist_handler = PairListResolver.load_pairlist(
                 pairlist_handler_config["method"],
                 exchange=exchange,
@@ -62,6 +79,7 @@ class PairListManager(LoggingMixin):
 
         refresh_period = config.get("pairlist_refresh_period", 3600)
         LoggingMixin.__init__(self, logger, refresh_period)
+        self._first_run = True
 
     def _check_backtest(self) -> None:
         if self._config["runmode"] not in (RunMode.BACKTEST, RunMode.EDGE, RunMode.HYPEROPT):
@@ -127,6 +145,45 @@ class PairListManager(LoggingMixin):
     def _get_cached_tickers(self) -> Tickers:
         return self._exchange.get_tickers()
 
+#    def refresh_pairlist(self) -> None:
+#        """Run pairlist through all configured Pairlist Handlers."""
+#        # Tickers should be cached to avoid calling the exchange on each call.
+#        tickers: Dict = {}
+#        if self._tickers_needed:
+#            tickers = self._get_cached_tickers()
+#
+#        # Generate the pairlist with first Pairlist Handler in the chain
+#        pairlist = self._pairlist_handlers[0].gen_pairlist(tickers)
+#
+#        # Process all Pairlist Handlers in the chain
+#        # except for the first one, which is the generator.
+#        for pairlist_handler in self._pairlist_handlers[1:]:
+#            pairlist = pairlist_handler.filter_pairlist(pairlist, tickers)
+#
+#        # Validation against blacklist happens after the chain of Pairlist Handlers
+#        # to ensure blacklist is respected.
+#        pairlist = self.verify_blacklist(pairlist, logger.warning)
+#
+#        self.log_once(f"Whitelist with {len(pairlist)} pairs: {pairlist}", logger.info)
+#
+#        self._whitelist = pairlist
+
+    def file_too_old(self, filename="", age_seconds=0):
+        if not os.path.isfile(filename):
+            return True, -1
+        t = max(os.path.getmtime(filename), os.path.getctime(filename))
+        # (datetime.now()-datetime.fromtimestamp(t)).seconds, datetime.fromtimestamp(t)
+        # logger.warning(
+        #     f"{datetime.fromtimestamp(os.path.getmtime(filename))} / "
+        #     f"{datetime.fromtimestamp(os.path.getctime(filename))} / "
+        #     f"{ (datetime.now()-datetime.fromtimestamp(os.path.getmtime(filename))).total_seconds()} / "
+        #     f"{ (datetime.now() - datetime.fromtimestamp(os.path.getctime(filename))).total_seconds()}"
+        # )
+        r_f_age = (datetime.now() - datetime.fromtimestamp(t)).total_seconds()
+        r_file_too_old = r_f_age > age_seconds
+        # print(r_file_too_old, r_f_age)
+        return r_file_too_old, r_f_age
+
     def refresh_pairlist(self) -> None:
         """Run pairlist through all configured Pairlist Handlers."""
         # Tickers should be cached to avoid calling the exchange on each call.
@@ -136,17 +193,84 @@ class PairListManager(LoggingMixin):
 
         # Generate the pairlist with first Pairlist Handler in the chain
         pairlist = self._pairlist_handlers[0].gen_pairlist(tickers)
+        if self._first_run:
+            # logger.warning(
+            #     f"{self._pairlist_handlers[0].name} length: {len(pairlist)}"
+            # )  #  pairs: {pairlist}
+            self.log_once(
+                f"{self._pairlist_handlers[0].name} length: {len(pairlist)}",
+                logger.info,
+            )
 
         # Process all Pairlist Handlers in the chain
         # except for the first one, which is the generator.
-        for pairlist_handler in self._pairlist_handlers[1:]:
-            pairlist = pairlist_handler.filter_pairlist(pairlist, tickers)
+        file_too_old_val, file_age = self.file_too_old(
+            filename=self.pairlist_filename, age_seconds=self.file_cache_ttl
+        )
+        # print("vio -", self._config["runmode"].value, file_too_old_val)
+        if (
+            self._config["runmode"].value
+            in ["hyperopt", "backtest", "util_no_exchange"]
+            and file_too_old_val
+        ) or (
+            self._config["runmode"].value
+            not in ["hyperopt", "backtest", "util_no_exchange"]
+        ):
+            if (
+                self._config["runmode"].value
+                in ["hyperopt", "backtest", "util_no_exchange"]
+                and file_too_old_val
+            ):
+                # logger.info(
+                #     f"vio - need to refresh pairlist - {self._config['runmode'].value} - {self.pairlist_filename}"
+                # )
+                self.log_once(
+                    f"vio - need to refresh pairlist - {self._config['runmode'].value} - {self.pairlist_filename}",
+                    logger.info,
+                )
+            for pairlist_handler in self._pairlist_handlers[1:]:
+                pairlist = pairlist_handler.filter_pairlist(pairlist, tickers)
+                if self._first_run:
+                    # logger.warning(
+                    #     f"{pairlist_handler.name} length: {len(pairlist)}"
+                    # )
+                    self.log_once(
+                        f"{pairlist_handler.name} length: {len(pairlist)}",
+                        logger.info,
+                    )
+            if (
+                self._config["runmode"].value
+                in ["hyperopt", "backtest", "util_no_exchange"]
+                and file_too_old_val
+                and len(pairlist) > 10
+            ):
+                with open(self.pairlist_filename, mode="wb") as file:
+                    cloudpickle.dump(pairlist, file)
+            if len(pairlist) <= 10 and self._first_run:
+                # with open(self.pairlist_filename, mode="rb") as file:
+                #     pairlist = cloudpickle.load(file)
+                logger.warning(f"vio - pairlist issue - len: {len(pairlist)}")
+                # self.log_once(f"vio - pairlist issue - len: {len(pairlist)}", logger.warning)
+        else:
+            with open(self.pairlist_filename, mode="rb") as file:
+                pairlist = cloudpickle.load(file)
+            # logger.info(
+            #     f"vio - will use cached pairlist - {self._config['runmode'].value} - length: {len(pairlist)} - {self.pairlist_filename}"
+            # )
+            self.log_once(
+                f"vio - will use cached pairlist - {self._config['runmode'].value} - length: {len(pairlist)} - {self.pairlist_filename}",
+                logger.info,
+            )
 
         # Validation against blacklist happens after the chain of Pairlist Handlers
         # to ensure blacklist is respected.
-        pairlist = self.verify_blacklist(pairlist, logger.warning)
+        pairlist = self.verify_blacklist(pairlist, logger.warning if self._first_run else logger.debug) # warning
 
-        self.log_once(f"Whitelist with {len(pairlist)} pairs: {pairlist}", logger.info)
+        self.log_once(
+            f"Whitelist with {len(pairlist)} pairs: {pairlist}", logger.debug
+        )
+
+        self._first_run = False
 
         self._whitelist = pairlist
 
@@ -167,7 +291,7 @@ class PairListManager(LoggingMixin):
             return []
         log_once = partial(self.log_once, logmethod=logmethod)
         for pair in pairlist.copy():
-            if pair in blacklist:
+            if pair in blacklist: #  and self._config.get("runmode", None) not in [RunMode.LIVE]
                 log_once(f"Pair {pair} in your blacklist. Removing it from whitelist...")
                 pairlist.remove(pair)
         return pairlist

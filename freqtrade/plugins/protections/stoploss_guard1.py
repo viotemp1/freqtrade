@@ -18,7 +18,7 @@ class StoplossGuard1(IProtection):
     def __init__(self, config: Config, protection_config: Dict[str, Any]) -> None:
         super().__init__(config, protection_config)
 
-        self._trade_limit = protection_config.get("trade_limit", 0.3)
+        self._trade_limit = protection_config.get("trade_limit", 30)
         self._disable_global_stop = protection_config.get("only_per_pair", False)
         self._only_per_side = protection_config.get("only_per_side", False)
         self._profit_limit = protection_config.get("required_profit", 0.0)
@@ -71,7 +71,7 @@ class StoplossGuard1(IProtection):
             # Long or short trades only
             trades = [trade for trade in trades if trade.trade_direction == side]
 
-        if len(trades) / total_trades < self._trade_limit/100.:
+        if len(trades) <= total_trades * self._trade_limit / 100.0:
             return None
 
         self.log_once(

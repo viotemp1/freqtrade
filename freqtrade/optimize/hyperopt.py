@@ -8,6 +8,8 @@ import logging
 import random
 import sys
 import warnings
+import psutil
+from time import sleep
 from datetime import datetime, timezone
 from math import ceil
 from pathlib import Path
@@ -71,6 +73,14 @@ INITIAL_POINTS = 30
 SKOPT_MODEL_QUEUE_SIZE = 10
 
 MAX_LOSS = 100000  # just a big enough number to be bad result in loss optimization
+
+early_stop_enable = True
+early_stop_perc = 0.001
+early_stop_std = 0.001
+early_stop_top = 10
+early_stop_patience = 0.2
+
+max_used_memory = 80 # 0 or negative to deactivate, otherwise pause worker
 
 
 class Hyperopt:
@@ -369,6 +379,14 @@ class Hyperopt:
         Keep this function as optimized as possible!
         """
         HyperoptStateContainer.set_state(HyperoptState.OPTIMIZE)
+
+        mem_used = psutil.virtual_memory().percent
+        if max_used_memory > 0 and mem_used > max_used_memory:
+            logger.warning(f"generate_optimizer paused - high memory usage {mem_used}")
+            while psutil.virtual_memory().percent > max_used_memory:
+                sleep(60)
+            logger.warning(f"generate_optimizer resumed - memory usage {psutil.virtual_memory().percent}")
+        
         params_dict = self._get_params_dict(self.dimensions, raw_params)
 
         # Apply parameters
@@ -670,10 +688,10 @@ class Hyperopt:
 
         self.experiment_plateau_stopper = myExperimentPlateauStopper(
             mode="min",
-            perc=0.001,
-            std=0.01,
-            top=10,
-            patience=int(0.2 * self.total_epochs),
+            perc=early_stop_perc,
+            std=early_stop_std,
+            top=early_stop_top,
+            patience=int(early_stop_patience * self.total_epochs),
         )
 
         # We don't need exchange instance anymore while running hyperopt
@@ -743,7 +761,10 @@ class Hyperopt:
                             # Use human-friendly indexes here (starting from 1)
                             current = i * jobs + j + 1 + start
 
-                            if self.evaluate_result(val, current, is_random[j]):
+                            if (
+                                self.evaluate_result(val, current, is_random[j])
+                                and early_stop_enable
+                            ):
                                 should_stop = True
                                 break
 
@@ -915,4 +936,4 @@ class myExperimentPlateauStopper:
         """Return whether to stop and prevent trials from starting."""
         return (
             self.has_plateaued() and self._iterations_plateau >= self._patience
-        ) or (self.no_increase())
+        ) or (self.no_increase() and self._iterations_noinc >= self._patience)

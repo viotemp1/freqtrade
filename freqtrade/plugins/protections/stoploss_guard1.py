@@ -93,7 +93,7 @@ class StoplossGuard1(IProtection):
         for trade in trades:
             logger.info(f"stoploss_guard1 - pair: {trade.pair} / exit_reason: {trade.exit_reason} / close_profit: {trade.close_profit} / profit_limit: {self._profit_limit}")
 
-        if len(trades) <= total_trades * self._trade_limit / 100.0:
+        if ( total_trades <= self._trade_limit / 10 ) or (len(trades) <= total_trades * self._trade_limit / 100.0):
             return None
 
         self.log_once(

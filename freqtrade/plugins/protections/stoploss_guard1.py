@@ -54,8 +54,8 @@ class StoplossGuard1(IProtection):
 
         trades = []
         for trade in trades1:
-            logger.info(f"stoploss_guard1 - pair: {trade.pair} / exit_reason: {trade.exit_reason} / close_profit: {trade.close_profit} / profit_limit: {self._profit_limit}")
-            logger.info(f"stoploss_guard1 - {ExitType.TRAILING_STOP_LOSS.value} - {ExitType.STOP_LOSS.value} - {ExitType.STOPLOSS_ON_EXCHANGE.value} - {ExitType.LIQUIDATION.value}")
+            # logger.info(f"stoploss_guard1 - pair: {trade.pair} / exit_reason: {trade.exit_reason} / close_profit: {trade.close_profit} / profit_limit: {self._profit_limit}")
+            # logger.info(f"stoploss_guard1 - {ExitType.TRAILING_STOP_LOSS.value} - {ExitType.STOP_LOSS.value} - {ExitType.STOPLOSS_ON_EXCHANGE.value} - {ExitType.LIQUIDATION.value}")
             if (
                 # str(trade.exit_reason)
                 # in (
@@ -63,8 +63,8 @@ class StoplossGuard1(IProtection):
                 #     ExitType.STOP_LOSS.value,
                 #     ExitType.STOPLOSS_ON_EXCHANGE.value,
                 #     ExitType.LIQUIDATION.value,
-                # )
-                and trade.close_profit
+                # ) and 
+                trade.close_profit
                 and trade.close_profit < self._profit_limit
             ):
                 trades.append(trade)
@@ -90,6 +90,8 @@ class StoplossGuard1(IProtection):
             trades = [trade for trade in trades if trade.trade_direction == side]
 
         logger.info(f"stoploss_guard1 - bad_trades: {len(trades)} / total_trades: {total_trades}")
+        for trade in trades:
+            logger.info(f"stoploss_guard1 - pair: {trade.pair} / exit_reason: {trade.exit_reason} / close_profit: {trade.close_profit} / profit_limit: {self._profit_limit}")
 
         if len(trades) <= total_trades * self._trade_limit / 100.0:
             return None

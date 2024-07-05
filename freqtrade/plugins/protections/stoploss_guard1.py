@@ -57,13 +57,13 @@ class StoplossGuard1(IProtection):
             logger.info(f"stoploss_guard1 - pair: {trade.pair} / exit_reason: {trade.exit_reason} / close_profit: {trade.close_profit} / profit_limit: {self._profit_limit}")
             logger.info(f"stoploss_guard1 - {ExitType.TRAILING_STOP_LOSS.value} - {ExitType.STOP_LOSS.value} - {ExitType.STOPLOSS_ON_EXCHANGE.value} - {ExitType.LIQUIDATION.value}")
             if (
-                str(trade.exit_reason)
-                in (
-                    ExitType.TRAILING_STOP_LOSS.value,
-                    ExitType.STOP_LOSS.value,
-                    ExitType.STOPLOSS_ON_EXCHANGE.value,
-                    ExitType.LIQUIDATION.value,
-                )
+                # str(trade.exit_reason)
+                # in (
+                #     ExitType.TRAILING_STOP_LOSS.value,
+                #     ExitType.STOP_LOSS.value,
+                #     ExitType.STOPLOSS_ON_EXCHANGE.value,
+                #     ExitType.LIQUIDATION.value,
+                # )
                 and trade.close_profit
                 and trade.close_profit < self._profit_limit
             ):

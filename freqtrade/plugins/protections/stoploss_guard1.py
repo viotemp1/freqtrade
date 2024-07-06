@@ -22,13 +22,15 @@ class StoplossGuard1(IProtection):
         self._disable_global_stop = protection_config.get("only_per_pair", False)
         self._only_per_side = protection_config.get("only_per_side", False)
         self._profit_limit = protection_config.get("required_profit", 0.0)
+        self._total_trades = 0
+        self._loosing_trades = 0
 
     def short_desc(self) -> str:
         """
         Short method description - used for startup-messages
         """
         return (
-            f"{self.name} - Frequent Stoploss Guard, {self._trade_limit} stoplosses "
+            f"{self.name} - Frequent Stoploss Guard, {(self._trade_limit/100):.1f} % losses "
             f"with profit < {self._profit_limit:.2%} within {self.lookback_period_str}."
         )
 
@@ -37,7 +39,7 @@ class StoplossGuard1(IProtection):
         LockReason to use
         """
         return (
-            f"{(self._trade_limit/100):.1f} % trades with losses in {self._lookback_period} min, "
+            f"{self._loosing_trades}/{self._total_trades} trades with losses in {self._lookback_period} min, "
             f"locking for {self._stop_duration} min."
         )
 
@@ -51,6 +53,7 @@ class StoplossGuard1(IProtection):
 
         trades1 = Trade.get_trades_proxy(pair=pair, is_open=False, close_date=look_back_until)
         total_trades = len(trades1)
+        self._total_trades = total_trades
 
         trades = []
         for trade in trades1:
@@ -89,15 +92,16 @@ class StoplossGuard1(IProtection):
             # Long or short trades only
             trades = [trade for trade in trades if trade.trade_direction == side]
 
-        logger.info(f"stoploss_guard1 - bad_trades: {len(trades)} / total_trades: {total_trades}")
+        self._loosing_trades = len(trades)
+        logger.info(f"stoploss_guard1 - bad_trades: {self._loosing_trades} / total_trades: {total_trades}")
         for trade in trades:
             logger.info(f"stoploss_guard1 - pair: {trade.pair} / exit_reason: {trade.exit_reason} / close_profit: {trade.close_profit} / profit_limit: {self._profit_limit}")
 
-        if ( total_trades <= self._trade_limit / 10 ) or (len(trades) <= total_trades * self._trade_limit / 100.0):
+        if ( total_trades <= self._trade_limit / 10 ) or (self._loosing_trades <= total_trades * self._trade_limit / 100.0):
             return None
 
         self.log_once(
-            f"Trading stopped due to {len(trades)}/{total_trades} "
+            f"Trading stopped due to {self._loosing_trades}/{total_trades} "
             f"losses within {self._lookback_period} minutes.",
             logger.info,
         )

@@ -37,7 +37,7 @@ class StoplossGuard1(IProtection):
         LockReason to use
         """
         return (
-            f"{self._trade_limit} stoplosses in {self._lookback_period} min, "
+            f"{(self._trade_limit/100):.1f} % trades with losses in {self._lookback_period} min, "
             f"locking for {self._stop_duration} min."
         )
 
@@ -97,8 +97,8 @@ class StoplossGuard1(IProtection):
             return None
 
         self.log_once(
-            f"Trading stopped due to {self._trade_limit} "
-            f"stoplosses within {self._lookback_period} minutes.",
+            f"Trading stopped due to {len(trades)}/{total_trades} "
+            f"losses within {self._lookback_period} minutes.",
             logger.info,
         )
         until = self.calculate_lock_end(trades, self._stop_duration)

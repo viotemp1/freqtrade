@@ -93,9 +93,10 @@ class StoplossGuard1(IProtection):
             trades = [trade for trade in trades if trade.trade_direction == side]
 
         self._loosing_trades = len(trades)
-        logger.info(f"stoploss_guard1 - bad_trades: {self._loosing_trades} / total_trades: {total_trades}")
-        for trade in trades:
-            logger.info(f"stoploss_guard1 - pair: {trade.pair} / exit_reason: {trade.exit_reason} / close_profit: {trade.close_profit} / profit_limit: {self._profit_limit}")
+        
+        # logger.info(f"stoploss_guard1 - bad_trades: {self._loosing_trades} / total_trades: {total_trades}")
+        # for trade in trades:
+        #     logger.info(f"stoploss_guard1 - pair: {trade.pair} / exit_reason: {trade.exit_reason} / close_profit: {trade.close_profit} / profit_limit: {self._profit_limit}")
 
         if ( total_trades <= self._trade_limit / 10 ) or (self._loosing_trades <= total_trades * self._trade_limit / 100.0):
             return None

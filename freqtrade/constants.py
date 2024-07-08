@@ -57,7 +57,7 @@ AVAILABLE_PAIRLISTS = [
     "SpreadFilter",
     "VolatilityFilter",
 ]
-AVAILABLE_PROTECTIONS = ["CooldownPeriod", "LowProfitPairs", "MaxDrawdown", "StoplossGuard"]
+AVAILABLE_PROTECTIONS = ["CooldownPeriod", "LowProfitPairs", "MaxDrawdown", "StoplossGuard", "StoplossGuard1"]
 AVAILABLE_DATAHANDLERS = ["json", "jsongz", "hdf5", "feather", "parquet"]
 BACKTEST_BREAKDOWNS = ["day", "week", "month"]
 BACKTEST_CACHE_AGE = ["none", "day", "week", "month"]

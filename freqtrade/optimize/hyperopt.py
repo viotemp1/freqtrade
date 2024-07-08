@@ -1170,7 +1170,7 @@ class myLoggerCallback(LoggerCallback):
                 f"{result['Avg_profit']}",
                 f"{result['Profit']}",
                 f"{result['Avg_duration']}",
-                ,
+                loss,
                 f"{result['Max_Drawdown_Acct']}",
                 f"{(result['time_total_s']):,.2f}",
             )

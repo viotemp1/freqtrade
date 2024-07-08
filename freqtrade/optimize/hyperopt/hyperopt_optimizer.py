@@ -17,6 +17,7 @@ from math import ceil
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 import psutil
+from time import sleep
 
 import rapidjson
 # from joblib import Parallel, cpu_count, delayed, dump, load, wrap_non_picklable_objects
@@ -82,9 +83,11 @@ ray_results_table_max_rows = -1  # -1 - half screen
 ray_reuse_actors = False
 ray_early_stop_enable = True
 ray_early_stop_perc = 0.001
-ray_early_stop_std = 0.01
+ray_early_stop_std = 0.001
 ray_early_stop_top = 10
-ray_early_stop_patience = 0.1  # 1/5 from total epochs
+ray_early_stop_patience = 0.2
+
+max_used_memory = 80 # 0 or negative to deactivate, otherwise pause worker
 
 
 def ray_setup_func():
@@ -426,8 +429,15 @@ class Hyperopt:
         """
 
         logger = ray_setup_func()
-
         os.chdir(Path(self.config["user_data_dir"]).parent.absolute())
+
+        mem_used = psutil.virtual_memory().percent
+        if max_used_memory > 0 and mem_used > max_used_memory:
+            logger.warning(f"objective paused - high memory usage {mem_used}")
+            while psutil.virtual_memory().percent > max_used_memory:
+                sleep(60)
+            logger.warning(f"objective resumed - memory usage {psutil.virtual_memory().percent}")
+        
         # print(f"objective start - {os.getcwd()}")
         logger.info(f"objective start - {os.getcwd()}")
         if custom_trade_info is not None:
@@ -521,6 +531,7 @@ class Hyperopt:
             self.total_epochs,
         )
         # print("objective result", result)
+        loss = result["loss"]
         ray_result_tmp["loss"] = [result["loss"]]
         ray_result_tmp["profit_perc"] = [100.0 * result["total_profit"]]
 
@@ -1163,7 +1174,7 @@ class myLoggerCallback(LoggerCallback):
             Bar(
                 self.live.console.width,
                 0,
-                psutil.virtual_memory().percent,
+                int(self.live.console.width * psutil.virtual_memory().percent / 100.0),
                 color="green",
                 bgcolor="black",
             ),
@@ -1178,7 +1189,7 @@ class myLoggerCallback(LoggerCallback):
             Bar(
                 self.live.console.width,
                 0,
-                psutil.cpu_percent(),
+                int(self.live.console.width * psutil.cpu_percent() / 100.0),
                 color="blue",
                 bgcolor="black",
             ),
@@ -1206,6 +1217,11 @@ class myLoggerCallback(LoggerCallback):
             self.live.update(self.table_master, refresh=True)
 
     def append_trial_results(self, trial_id, result):
+        loss = result['loss']
+        if abs(loss) > 100:
+            loss = f"{result['loss']:,.6e}"
+        else:
+            loss = f"{result['loss']:,.6f}"
         self.trial_results.append(
             (
                 f"{trial_id}",
@@ -1214,23 +1230,25 @@ class myLoggerCallback(LoggerCallback):
                 f"{result['Avg_profit']}",
                 f"{result['Profit']}",
                 f"{result['Avg_duration']}",
-                f"{result['loss']:,.4f}",
+                ,
                 f"{result['Max_Drawdown_Acct']}",
                 f"{(result['time_total_s']):,.2f}",
             )
         )
 
     def on_trial_result(self, iteration, trials, trial, result, **info):
+        self.count_trials += 1  # len(trials)
         # print(
-        #     f"Results for trial {trial} / iteration {iteration}: {result} - count trials = {len(trials)}"
+        #     f"Results for trial {trial} / iteration {iteration} / count trials = {self.count_trials}"
         # )
-        self.count_trials = len(trials)
+        # print(f"result: {result}")
+
         if self.print_all:
-            self.append_trial_results(len(trials), result)
+            self.append_trial_results(self.count_trials, result)
         elif result["loss"] < self.best_loss:
             self.best_loss = result["loss"]
-            self.best_epoch = len(trials)
-            self.append_trial_results(len(trials), result)
+            self.best_epoch = self.count_trials
+            self.append_trial_results(self.count_trials, result)
 
         self.generate_table()
         self.live.update(self.table_master, refresh=True)
@@ -1467,7 +1485,8 @@ class ExperimentPlateauStopper(Stopper):
 
     def has_plateaued(self):
         return (
-            len(self._top_values) == self._top and np.std(self._top_values) <= self._std
+            len(self._top_values) == self._top
+            and abs(np.std(self._top_values) / np.mean(self._top_values)) <= self._std
         )
 
     def no_increase(self):
@@ -1477,4 +1496,4 @@ class ExperimentPlateauStopper(Stopper):
         """Return whether to stop and prevent trials from starting."""
         return (
             self.has_plateaued() and self._iterations_plateau >= self._patience
-        ) or self.no_increase()
+        ) or (self.no_increase() and self._iterations_noinc >= self._patience)

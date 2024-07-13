@@ -101,7 +101,8 @@ def ray_setup_func():
 
     os.environ["RAY_TQDM"] = "1"
     os.environ["RAY_PROFILING"] = "0"
-    os.environ["RAY_DEDUP_LOGS"] = "0"
+    os.environ["RAY_DEDUP_LOGS"] = "1"
+    # os.environ["RAY_ENABLE_RECORD_ACTOR_TASK_LOGGING"] = "1"
     # os.environ["TUNE_DISABLE_AUTO_CALLBACK_LOGGERS"] = "1"
     # os.environ["TUNE_MAX_PENDING_TRIALS_PG"] = f"{min(4,cpu_count()//8)}"
     # os.environ["FUNCTION_SIZE_WARN_THRESHOLD"] = f"{2 * 10**7}"
@@ -681,7 +682,7 @@ class Hyperopt:
             searchers_list = [
                 "variant_generator",
                 "random",
-                # "ax",
+                "ax",
                 "hyperopt",
                 "bayesopt",
                 "bohb",
@@ -727,6 +728,29 @@ class Hyperopt:
                     searcher,
                     random_state=self.random_state,
                 )
+            elif searcher == "optuna":
+                import optuna
+                # NSGAIIISampler CmaEsSampler GPSampler NSGAIISampler TPESampler QMCSampler
+                searcher = tune.create_searcher(
+                    searcher,
+                    sampler=optuna.samplers.NSGAIIISampler(seed=self.random_state)
+                )
+            elif searcher == "hebo":
+                import hebo
+                import torch  # hebo has torch as a dependency
+                # gp gpy gpy_mlp psgld svidkl deep_ensemble rf catboost 
+                # to test
+                # 'svgp'  : SVGP,
+                # 'mcbn' : MCBNEnsemble, 
+                # 'masked_deep_ensemble' : MaskedDeepEnsemble,
+                # 'fe_deep_ensemble': FeDeepEnsemble, 
+                # 'gumbel': GumbelDeepEnsemble, 
+                searcher = tune.create_searcher(
+                    searcher,
+                    random_state_seed=self.random_state,
+                    model_name="gp",
+                    scramble_seed=self.random_state
+                )     
             else:
                 searcher = tune.create_searcher(
                     searcher, random_state_seed=self.random_state

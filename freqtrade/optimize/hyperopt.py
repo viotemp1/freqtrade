@@ -12,7 +12,7 @@ import json
 import warnings
 from copy import deepcopy
 from datetime import datetime, timezone
-from math import ceil
+import math
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 import psutil
@@ -64,6 +64,7 @@ from rich.table import Table
 from rich.console import Console
 from rich.bar import Bar
 from rich.text import Text
+import asciichartpy as acp
 
 # Suppress scikit-learn FutureWarnings from skopt
 with warnings.catch_warnings():
@@ -83,17 +84,15 @@ with warnings.catch_warnings():
 
 ray_results_table_max_rows = -1  # -1 - half screen
 ray_reuse_actors = False
-ray_early_stop_enable = True
-ray_early_stop_perc = 0.001
-ray_early_stop_std = 0.001
-ray_early_stop_top = 10
-ray_early_stop_patience = 0.2
 
-max_used_memory = 80 # 0 or negative to deactivate, otherwise pause worker
-
+max_used_memory = 90 # 0 or negative to deactivate, otherwise pause worker
 
 MAX_LOSS = 100000  # just a big enough number to be bad result in loss optimization
 
+plot_metric_list = [
+    "trial_id", "Trades", "Win_Draw_Loss_Win_perc", "Avg_profit", "Profit", "Avg_duration", "loss", 
+    "Max_Drawdown_Acct", "time_total_s"
+    ]
 
 def ray_setup_func():
     logger = logging.getLogger(__name__)
@@ -202,6 +201,13 @@ class Hyperopt:
         self.print_all = self.config.get("print_all", False)
         self.print_hyperopt_results = self.config.get("print_hyperopt_results", True)
         self.print_json = self.config.get("print_json", False)
+        self.plot_metric = self.config.get("plot_metric", "Profit")
+        self.ray_early_stop_enable = self.config.get("ray_early_stop_enable", True)
+        self.ray_early_stop_perc = self.config.get("ray_early_stop_perc", 0.005) # 0.001
+        self.ray_early_stop_std = self.config.get("ray_early_stop_std", 0.005) # 0.001
+        self.ray_early_stop_top = self.config.get("ray_early_stop_top", 10)
+        self.ray_early_stop_patience = self.config.get("ray_early_stop_patience", 0.2)
+        
         # self.hyperopt_table_header = 0
         # self.print_colorized = self.config.get("print_colorized", False)
 
@@ -677,8 +683,17 @@ class Hyperopt:
     # 'ax' - not working
     # schedulers: ['fifo', 'async_hyperband', 'asynchyperband', 'median_stopping_rule', 'medianstopping', 'hyperband', 'hb_bohb', 'pbt', 'pbt_replay', 'pb2', 'resource_changing']
     def get_search_algo_scheduler(self, dimensions: Dict, config_jobs):
-        searcher = self.custom_hyperopt.generate_estimator(dimensions=dimensions)
-        if isinstance(searcher, str):
+        searcher_orig = self.custom_hyperopt.generate_estimator(dimensions=dimensions)
+        searcher_param1 = None
+        if isinstance(searcher_orig, tuple) and len(searcher_orig) == 2:
+            searcher = searcher_orig[0]
+            searcher_param1 = searcher_orig[1]
+        elif isinstance(searcher_orig, str):
+            searcher = searcher_orig
+        else:
+            raise Exception(f"generate_estimator should return either str or tuple. Got instead {searcher_orig} - {type(searcher_orig)}")
+        
+        if isinstance(searcher_orig, str):
             searchers_list = [
                 "variant_generator",
                 "random",
@@ -696,7 +711,8 @@ class Hyperopt:
                     f"Ray searcher {searcher} not supported. Please use one of {searchers_list}"
                 )
         self.searcher = searcher
-        logger.info(f"Using searcher {searcher}.")
+        self.searcher_param1 = searcher_param1
+        logger.info(f"Using searcher {searcher} - {searcher_param1}.")
         try:
             if searcher == "nevergrad":
                 import nevergrad as ng
@@ -731,26 +747,60 @@ class Hyperopt:
             elif searcher == "optuna":
                 import optuna
                 # NSGAIIISampler CmaEsSampler GPSampler NSGAIISampler TPESampler QMCSampler
-                searcher = tune.create_searcher(
-                    searcher,
-                    sampler=optuna.samplers.NSGAIIISampler(seed=self.random_state)
-                )
+                if self.searcher_param1:
+                    if self.searcher_param1 == "NSGAIIISampler":
+                        searcher = tune.create_searcher(
+                            searcher,
+                            sampler=optuna.samplers.NSGAIIISampler(seed=self.random_state)
+                        )
+                    elif self.searcher_param1 == "CmaEsSampler":
+                        searcher = tune.create_searcher(
+                            searcher,
+                            sampler=optuna.samplers.CmaEsSampler(seed=self.random_state, warn_independent_sampling=False)
+                        )
+                    elif self.searcher_param1 == "GPSampler":
+                        searcher = tune.create_searcher(
+                            searcher,
+                            sampler=optuna.samplers.GPSampler(seed=self.random_state, deterministic_objective=True)
+                        )
+                    elif self.searcher_param1 == "NSGAIISampler":
+                        searcher = tune.create_searcher(
+                            searcher,
+                            sampler=optuna.samplers.NSGAIISampler(seed=self.random_state)
+                        )
+                    elif self.searcher_param1 == "TPESampler":
+                        searcher = tune.create_searcher(
+                            searcher,
+                            sampler=optuna.samplers.TPESampler(seed=self.random_state)
+                        )
+                    elif self.searcher_param1 == "QMCSampler":
+                        searcher = tune.create_searcher(
+                            searcher,
+                            sampler=optuna.samplers.QMCSampler(seed=self.random_state)
+                        )
+                    else: # default
+                        searcher = tune.create_searcher(
+                            searcher,
+                            sampler=optuna.samplers.NSGAIIISampler(seed=self.random_state)
+                        )
             elif searcher == "hebo":
                 import hebo
                 import torch  # hebo has torch as a dependency
-                # gp gpy gpy_mlp psgld svidkl deep_ensemble rf catboost 
-                # to test
-                # 'svgp'  : SVGP,
-                # 'mcbn' : MCBNEnsemble, 
-                # 'masked_deep_ensemble' : MaskedDeepEnsemble,
-                # 'fe_deep_ensemble': FeDeepEnsemble, 
-                # 'gumbel': GumbelDeepEnsemble, 
-                searcher = tune.create_searcher(
-                    searcher,
-                    random_state_seed=self.random_state,
-                    model_name="gp",
-                    scramble_seed=self.random_state
-                )     
+                # gp gpy gpy_mlp psgld svidkl deep_ensemble rf catboost svgp mcbn masked_deep_ensemble fe_deep_ensemble gumbel
+                if self.searcher_param1:
+                    searcher = tune.create_searcher(
+                        searcher,
+                        random_state_seed=self.random_state,
+                        model_name=self.searcher_param1,
+                        scramble_seed=self.random_state
+                    )
+                else: # default
+                    searcher = tune.create_searcher(
+                        searcher,
+                        random_state_seed=self.random_state,
+                        model_name="gp",
+                        scramble_seed=self.random_state
+                    )
             else:
                 searcher = tune.create_searcher(
                     searcher, random_state_seed=self.random_state
@@ -911,28 +961,29 @@ class Hyperopt:
             )
 #>>>>>>> b54fc2d8c (hyperopt ray)
 
-            if self.print_hyperopt_results or self.print_all:
+            if self.print_hyperopt_results or self.print_all or self.plot_chart:
                 r_callbacks = [
                     myLoggerCallback(
                         strategy=str(self.config["strategy"]),
                         print_all=self.print_all,
                         total_epochs=self.total_epochs,
                         table_max_rows=ray_results_table_max_rows,
+                        plot_metric=self.plot_metric,
                     )
                 ]
             else:
                 r_callbacks = None
 
-            if ray_early_stop_enable:
+            if self.ray_early_stop_enable:
                 stop_cb = ExperimentPlateauStopper(
                     "loss",
-                    perc=ray_early_stop_perc,
-                    std=ray_early_stop_std,
-                    top=ray_early_stop_top,
+                    perc=self.ray_early_stop_perc,
+                    std=self.ray_early_stop_std,
+                    top=self.ray_early_stop_top,
                     mode="min",
                     patience=(
                         int(
-                            ray_early_stop_patience
+                            self.ray_early_stop_patience
                             * self.total_epochs  # max(100, int(ray_early_stop_patience * self.total_epochs))
                         )
                     ),
@@ -1062,14 +1113,20 @@ class Hyperopt:
 # https://github.com/Textualize/rich/discussions/482
 class myLoggerCallback(LoggerCallback):
     def __init__(
-        self, strategy="", print_all=False, total_epochs=-1, table_max_rows=-1
+        self, strategy="", print_all=False, total_epochs=-1, table_max_rows=-1, plot_metric=""
     ) -> None:
+
+        self.console_width = Console().width
+        self.console_height = Console().height
+        
         if table_max_rows <= 0:
-            table_max_rows = Console().height // 2
+            table_max_rows = self.console_height // 3
 
         self.trial_results = deque(maxlen=table_max_rows)  # []
+        self.plot_trial_results = deque(maxlen=min(int(0.9*self.console_width), self.console_width-14)) # []
         self.best_loss = MAX_LOSS
         self.print_all = print_all
+        self.plot_metric = plot_metric
         if total_epochs <= 0:
             logger.warning(
                 f"Please set total_epochs > 0 for myLoggerCallback - {total_epochs}"
@@ -1115,12 +1172,47 @@ class myLoggerCallback(LoggerCallback):
         for col in self.table_columns:
             self.table.add_column(col)
 
+        plot_list = None
+        if self.plot_metric and len(self.plot_metric) > 0 and len(self.plot_trial_results) > 1:
+            if self.plot_metric in plot_metric_list:
+                plot_list = []
+            else:
+                logger.error(f"plot_metric {self.plot_metric} not in {plot_metric_list}")
+                self.plot_metric = ""
+        
         for result in self.trial_results:
             self.table.add_row(*result)
 
-        self.table_master.add_row(self.table)
-        progress = int(self.count_trials * self.live.console.width / self.total_epochs)
+        if plot_list is not None:
+            for result in self.plot_trial_results:
+                if self.plot_metric == "Profit":
+                    profit = result # [plot_metric_list.index(self.plot_metric)]
+                    try:
+                        profit = profit.split("(")[1].replace(")", "").replace("%", "").replace(",", "")
+                        profit = float(profit)
+                        plot_list.append(profit)
+                    except:
+                        # print(profit)
+                        # profit = math.nan
+                        pass
+                else:
+                    plot_list.append(result) # [plot_metric_list.index(self.plot_metric)]
 
+        self.table_master.add_row(self.table)
+
+        # print("plot_metric", self.plot_metric, "len trial_results", len(self.trial_results),  "plot_list", plot_list)
+        if plot_list:
+            try:
+                # plot_list = plot_list[-int(0.9*self.console_width):]
+                if len(plot_list) > 1:
+                    plot = acp.plot(plot_list, {'height': self.console_height // 4, 'format':'{:.4e}'})
+                    self.table_master.add_row(plot)
+            except Exception as e:
+                logger.error(repr(e))
+                pass
+
+        
+        progress = int(self.count_trials * self.live.console.width / self.total_epochs)
         table_progress = Table(
             show_header=False, expand=True, pad_edge=False, show_lines=False, box=None
         )
@@ -1160,16 +1252,6 @@ class myLoggerCallback(LoggerCallback):
         )
         self.table_master.add_row(table_cpu)
 
-        # self.table_master.add_row(
-        #     Bar(self.live.console.width, 0, progress, color="red", bgcolor="black")
-        # )
-        # self.table_master.add_row(
-        #     Bar(self.live.console.width, 0, psutil.virtual_memory().percent, color="green", bgcolor="black")
-        # )
-        # self.table_master.add_row(
-        #     Bar(self.live.console.width, 0, psutil.cpu_percent(), color="blue", bgcolor="black")
-        # )
-
     def on_step_begin(self, iteration, trials, **info):
         if self.live is None:
             self.live = Live(
@@ -1206,13 +1288,17 @@ class myLoggerCallback(LoggerCallback):
         #     f"Results for trial {trial} / iteration {iteration} / count trials = {self.count_trials}"
         # )
         # print(f"result: {result}")
-
+        
         if self.print_all:
             self.append_trial_results(self.count_trials, result)
+            if self.plot_metric and len(self.plot_metric) > 0:
+                self.plot_trial_results.append(result[self.plot_metric])
         elif result["loss"] < self.best_loss:
             self.best_loss = result["loss"]
             self.best_epoch = self.count_trials
             self.append_trial_results(self.count_trials, result)
+            if self.plot_metric and len(self.plot_metric) > 0:
+                self.plot_trial_results.append(result[self.plot_metric])
 
         self.generate_table()
         self.live.update(self.table_master, refresh=True)
@@ -1222,105 +1308,6 @@ class myLoggerCallback(LoggerCallback):
             self.live.stop()
 
 
-# # old - ok
-# class myLoggerCallback(LoggerCallback):
-#     def __init__(self, strategy="", print_all=False, total_epochs=-1) -> None:
-#         self.trial_results = []
-#         self.best_loss = MAX_LOSS
-#         self.print_all = print_all
-#         if total_epochs <= 0:
-#             logger.warning(
-#                 f"Please set total_epochs > 0 for myLoggerCallback - {total_epochs}"
-#             )
-#         self.total_epochs = total_epochs
-#         self.strategy = strategy
-
-#         self.live = None
-#         self.table = Table(
-#             title=f"{self.strategy} - Epoch {0}/{self.total_epochs}", expand=True
-#         )
-#         self.table.add_column("Epoch")
-#         self.table.add_column("Trades")
-#         self.table.add_column("Win  Draw  Loss  Win%")
-#         self.table.add_column("Avg profit")
-#         self.table.add_column("Profit")
-#         self.table.add_column("Avg duration")
-#         self.table.add_column("Objective")
-#         self.table.add_column("Max Drawdown (Acct)")
-#         self.table.add_column("Time to run")
-
-#     def generate_table(self) -> Table:
-#         """Make a new table."""
-#         self.table.title = (
-#             f"{self.strategy} - Epoch {len(self.trial_results)}/{self.total_epochs}"
-#         )
-
-#         if self.print_all:
-#             self.table = Table(
-#                 title=f"{self.strategy} - Epoch {0}/{self.total_epochs}", expand=True
-#             )
-#             self.table.add_column("Epoch")
-#             self.table.add_column("Trades")
-#             self.table.add_column("Win  Draw  Loss  Win%")
-#             self.table.add_column("Avg profit")
-#             self.table.add_column("Profit")
-#             self.table.add_column("Avg duration")
-#             self.table.add_column("Objective")
-#             self.table.add_column("Max Drawdown (Acct)")
-#             self.table.add_column("Time to run")
-#             for trial_id, result in enumerate(self.trial_results):
-#                 # value = random.random() * 100
-#                 # table.add_row(
-#                 #     f"{trial_id+1}", f"{(value):,.2f}", "[red]ERROR" if value < 50 else "[green]SUCCESS"
-#                 # )
-#                 self.table.add_row(
-#                     f"{trial_id+1}",
-#                     f"{result['Trades']}",
-#                     f"{result['Win_Draw_Loss_Win_perc']}",
-#                     f"{result['Avg_profit']}",
-#                     f"{result['Profit']}",
-#                     f"{result['Avg_duration']}",
-#                     f"{result['loss']:,.2f}",
-#                     f"{result['Max_Drawdown_Acct_']}",
-#                     f"{(result['time_total_s']):,.2f}",
-#                 )
-#         elif self.trial_results[-1]["loss"] < self.best_loss:
-#             self.best_loss = self.trial_results[-1]["loss"]
-#             result = self.trial_results[-1]
-#             # self.table.add_row(
-#             #     f"{len(self.trial_results)}",
-#             #     f"{result['Trades']}",
-#             #     f"{result['Win_Draw_Loss_Win_perc']}",
-#             #     f"{result['Avg_profit']}",
-#             #     f"{result['Profit']}",
-#             #     f"{result['Avg_duration']}",
-#             #     f"{result['loss']:,.2f}",
-#             #     f"{result['Max_Drawdown_Acct']}",
-#             #     f"{(result['time_total_s']):,.2f}",
-#             # )
-
-#     def on_step_begin(self, iteration, trials, **info):
-#         if self.live is None:
-#             self.live = Live(
-#                 self.table,
-#                 transient=True,
-#                 vertical_overflow="ellipsis",
-#                 auto_refresh=False,
-#             )  # , screen=True : crop', 'ellipsis', 'visible', , refresh_per_second=0.2
-#             self.live.start(refresh=True)
-#             self.live.update(self.table, refresh=True)
-
-#     def on_trial_result(self, iteration, trials, trial, result, **info):
-#         # print(
-#         #     f"Results for trial {trial} / iteration {iteration}: {result} - count trials = {len(trials)}"
-#         # )
-#         self.trial_results.append(result)
-#         self.generate_table()
-#         self.live.update(self.table, refresh=True)
-
-#     def on_experiment_end(self, trials, **info):
-#         if self.live.is_started:
-#             self.live.stop()
 
 
 class ExperimentPlateauStopper(Stopper):
@@ -1441,7 +1428,7 @@ class ExperimentPlateauStopper(Stopper):
             if stop_all:
                 logger.info(
                     f"myExperimentPlateauStopper - current_epoch: {self._current_epoch} / best_epoch: {self._best_epoch} / "
-                    f"iterations_plateau: {self._iterations_plateau}/ iterations_noinc:{self._iterations_noinc} / patience: {self._patience} / "
+                    f"iterations_plateau: {self._iterations_plateau}/ iterations_noinc: {self._iterations_noinc} / patience: {self._patience} / "
                     f"has_plateaued: {has_plateaued} / no_increase: {no_increase} / stop_all: {stop_all} / std: {std_value} / "
                     f"last_result: {self._last_result} / best_result: {self._best_result}"
                 )

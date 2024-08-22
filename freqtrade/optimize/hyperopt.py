@@ -78,9 +78,9 @@ early_stop_enable = True
 early_stop_perc = 0.001
 early_stop_std = 0.001
 early_stop_top = 10
-early_stop_patience = 0.2
+early_stop_patience = 0.25
 
-max_used_memory = 80 # 0 or negative to deactivate, otherwise pause worker
+max_used_memory = 90 # 0 or negative to deactivate, otherwise pause worker
 
 
 class Hyperopt:

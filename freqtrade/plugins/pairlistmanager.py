@@ -82,6 +82,7 @@ class PairListManager(LoggingMixin):
         self._first_run = True
 
     def _check_backtest(self) -> None:
+        # logger.warning(f"_check_backtest - runmode: {self._config['runmode']}")
         if self._config["runmode"] not in (RunMode.BACKTEST, RunMode.EDGE, RunMode.HYPEROPT):
             return
 
@@ -89,6 +90,7 @@ class PairListManager(LoggingMixin):
         noaction_pairlists: List[str] = []
         biased_pairlists: List[str] = []
         for pairlist_handler in self._pairlist_handlers:
+            # logger.warning(f"_check_backtest - pairlist_handler: {pairlist_handler.name} / supports_backtesting: {pairlist_handler.supports_backtesting}")
             if pairlist_handler.supports_backtesting == SupportsBacktesting.NO:
                 pairlist_errors.append(pairlist_handler.name)
             if pairlist_handler.supports_backtesting == SupportsBacktesting.NO_ACTION:

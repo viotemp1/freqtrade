@@ -109,7 +109,7 @@ def ray_setup_func():
 
     os.environ["RAY_TQDM"] = "1"
     os.environ["RAY_PROFILING"] = "0"
-    os.environ["RAY_DEDUP_LOGS"] = "1"
+    os.environ["RAY_DEDUP_LOGS"] = "0"
     # os.environ["RAY_ENABLE_RECORD_ACTOR_TASK_LOGGING"] = "1"
     # os.environ["TUNE_DISABLE_AUTO_CALLBACK_LOGGERS"] = "1"
     os.environ["TUNE_MAX_PENDING_TRIALS_PG"] = f"{max(4,cpu_count()//2)}"
@@ -282,9 +282,6 @@ class Hyperopt:
             latest_filename, {"latest_hyperopt": str(results_file.name)}, log=False
         )
         
-    # def assign_params(
-    #     self, backtesting: Backtesting, params_dict: Dict, category: str
-    # ) -> None:
     @staticmethod
     def assign_params(
         backtesting: Backtesting, params_dict: Dict, category: str
@@ -297,7 +294,6 @@ class Hyperopt:
                 # noinspection PyProtectedMember
                 attr.value = params_dict[attr_name]
 
-    # def _get_params_dict(self, dimensions: {}, raw_params: {}) -> Dict:
     @staticmethod
     def _get_params_dict(dimensions: {}, raw_params: {}) -> Dict:
         # Ensure the number of dimensions match
@@ -467,142 +463,131 @@ class Hyperopt:
                     f"Unknown search space {original_dim} / {type(original_dim)}"
                 )
 
-    def assign_params(
-        self, backtesting: Backtesting, params_dict: Dict, category: str
-    ) -> None:
-        """
-        Assign hyperoptable parameters
-        """
-        for attr_name, attr in backtesting.strategy.enumerate_parameters(category):
-            if attr.optimize:
-                # noinspection PyProtectedMember
-                attr.value = params_dict[attr_name]
+    # def objective(
+    #     self, config: Dict[str, Any], backtesting: Backtesting, custom_trade_info: Dict
+    # ) -> Dict[str, Any]:
+    #     """
+    #     Used Optimize function.
+    #     Called once per epoch to optimize whatever is configured.
+    #     Keep this function as optimized as possible!
+    #     """
 
-    def objective(
-        self, config: Dict[str, Any], backtesting: Backtesting, custom_trade_info: Dict
-    ) -> Dict[str, Any]:
-        """
-        Used Optimize function.
-        Called once per epoch to optimize whatever is configured.
-        Keep this function as optimized as possible!
-        """
+    #     logger = ray_setup_func()
+    #     os.chdir(Path(self.config["user_data_dir"]).parent.absolute())
 
-        logger = ray_setup_func()
-        os.chdir(Path(self.config["user_data_dir"]).parent.absolute())
+    #     mem_used = psutil.virtual_memory().percent
+    #     if max_used_memory > 0 and mem_used > max_used_memory:
+    #         logger.warning(f"objective paused - high memory usage {mem_used}")
+    #         while psutil.virtual_memory().percent > max_used_memory:
+    #             sleep(60)
+    #         logger.warning(f"objective resumed - memory usage {psutil.virtual_memory().percent}")
 
-        mem_used = psutil.virtual_memory().percent
-        if max_used_memory > 0 and mem_used > max_used_memory:
-            logger.warning(f"objective paused - high memory usage {mem_used}")
-            while psutil.virtual_memory().percent > max_used_memory:
-                sleep(60)
-            logger.warning(f"objective resumed - memory usage {psutil.virtual_memory().percent}")
+    #     # print(f"objective start - {os.getcwd()}")
+    #     logger.info(f"objective start - {os.getcwd()}")
+    #     if custom_trade_info is not None:
+    #         backtesting.strategy.custom_trade_info = custom_trade_info
 
-        # print(f"objective start - {os.getcwd()}")
-        logger.info(f"objective start - {os.getcwd()}")
-        if custom_trade_info is not None:
-            backtesting.strategy.custom_trade_info = custom_trade_info
+    #     HyperoptStateContainer.set_state(HyperoptState.OPTIMIZE)
+    #     backtest_start_time = datetime.now(timezone.utc)
+    #     params_dict = self._get_params_dict(self.dimensions, config)
 
-        HyperoptStateContainer.set_state(HyperoptState.OPTIMIZE)
-        backtest_start_time = datetime.now(timezone.utc)
-        params_dict = self._get_params_dict(self.dimensions, config)
+    #     # Apply parameters
+    #     if HyperoptTools.has_space(self.config, "buy"):
+    #         self.assign_params(backtesting, params_dict, "buy")
 
-        # Apply parameters
-        if HyperoptTools.has_space(self.config, "buy"):
-            self.assign_params(backtesting, params_dict, "buy")
+    #     if HyperoptTools.has_space(self.config, "sell"):
+    #         self.assign_params(backtesting, params_dict, "sell")
 
-        if HyperoptTools.has_space(self.config, "sell"):
-            self.assign_params(backtesting, params_dict, "sell")
+    #     if HyperoptTools.has_space(self.config, "protection"):
+    #         self.assign_params(backtesting, params_dict, "protection")
 
-        if HyperoptTools.has_space(self.config, "protection"):
-            self.assign_params(backtesting, params_dict, "protection")
+    #     if HyperoptTools.has_space(self.config, "roi"):
+    #         backtesting.strategy.minimal_roi = self.custom_hyperopt.generate_roi_table(
+    #             params_dict
+    #         )
 
-        if HyperoptTools.has_space(self.config, "roi"):
-            backtesting.strategy.minimal_roi = self.custom_hyperopt.generate_roi_table(
-                params_dict
-            )
+    #     if HyperoptTools.has_space(self.config, "stoploss"):
+    #         backtesting.strategy.stoploss = params_dict["stoploss"]
 
-        if HyperoptTools.has_space(self.config, "stoploss"):
-            backtesting.strategy.stoploss = params_dict["stoploss"]
+    #     if HyperoptTools.has_space(self.config, "trailing"):
+    #         d = self.custom_hyperopt.generate_trailing_params(params_dict)
+    #         backtesting.strategy.trailing_stop = d["trailing_stop"]
+    #         backtesting.strategy.trailing_stop_positive = d["trailing_stop_positive"]
+    #         backtesting.strategy.trailing_stop_positive_offset = d[
+    #             "trailing_stop_positive_offset"
+    #         ]
+    #         backtesting.strategy.trailing_only_offset_is_reached = d[
+    #             "trailing_only_offset_is_reached"
+    #         ]
 
-        if HyperoptTools.has_space(self.config, "trailing"):
-            d = self.custom_hyperopt.generate_trailing_params(params_dict)
-            backtesting.strategy.trailing_stop = d["trailing_stop"]
-            backtesting.strategy.trailing_stop_positive = d["trailing_stop_positive"]
-            backtesting.strategy.trailing_stop_positive_offset = d[
-                "trailing_stop_positive_offset"
-            ]
-            backtesting.strategy.trailing_only_offset_is_reached = d[
-                "trailing_only_offset_is_reached"
-            ]
+    #     if HyperoptTools.has_space(self.config, "trades"):
+    #         if self.config["stake_amount"] == "unlimited" and (
+    #             params_dict["max_open_trades"] == -1
+    #             or params_dict["max_open_trades"] == 0
+    #         ):
+    #             # Ignore unlimited max open trades if stake amount is unlimited
+    #             params_dict.update({"max_open_trades": self.config["max_open_trades"]})
 
-        if HyperoptTools.has_space(self.config, "trades"):
-            if self.config["stake_amount"] == "unlimited" and (
-                params_dict["max_open_trades"] == -1
-                or params_dict["max_open_trades"] == 0
-            ):
-                # Ignore unlimited max open trades if stake amount is unlimited
-                params_dict.update({"max_open_trades": self.config["max_open_trades"]})
+    #         updated_max_open_trades = (
+    #             int(params_dict["max_open_trades"])
+    #             if (
+    #                 params_dict["max_open_trades"] != -1
+    #                 and params_dict["max_open_trades"] != 0
+    #             )
+    #             else float("inf")
+    #         )
 
-            updated_max_open_trades = (
-                int(params_dict["max_open_trades"])
-                if (
-                    params_dict["max_open_trades"] != -1
-                    and params_dict["max_open_trades"] != 0
-                )
-                else float("inf")
-            )
+    #         self.config.update({"max_open_trades": updated_max_open_trades})
 
-            self.config.update({"max_open_trades": updated_max_open_trades})
+    #         backtesting.strategy.max_open_trades = updated_max_open_trades
 
-            backtesting.strategy.max_open_trades = updated_max_open_trades
+    #     with self.data_pickle_file.open("rb") as f:
+    #         processed = load(f, mmap_mode="r")
+    #         if self.analyze_per_epoch:
+    #             # Data is not yet analyzed, rerun populate_indicators.
+    #             processed = self.advise_and_trim(processed)
 
-        with self.data_pickle_file.open("rb") as f:
-            processed = load(f, mmap_mode="r")
-            if self.analyze_per_epoch:
-                # Data is not yet analyzed, rerun populate_indicators.
-                processed = self.advise_and_trim(processed)
+    #     bt_results = backtesting.backtest(
+    #         processed=processed, start_date=self.min_date, end_date=self.max_date
+    #     )
+    #     backtest_end_time = datetime.now(timezone.utc)
+    #     bt_results.update(
+    #         {
+    #             "backtest_start_time": int(backtest_start_time.timestamp()),
+    #             "backtest_end_time": int(backtest_end_time.timestamp()),
+    #         }
+    #     )
+    #     result = self._get_results_dict(
+    #         backtesting,
+    #         bt_results,
+    #         self.min_date,
+    #         self.max_date,
+    #         params_dict,
+    #         processed=processed,
+    #     )
+    #     result["runtime_s"] = int(backtest_end_time.timestamp()) - int(
+    #         backtest_start_time.timestamp()
+    #     )
 
-        bt_results = backtesting.backtest(
-            processed=processed, start_date=self.min_date, end_date=self.max_date
-        )
-        backtest_end_time = datetime.now(timezone.utc)
-        bt_results.update(
-            {
-                "backtest_start_time": int(backtest_start_time.timestamp()),
-                "backtest_end_time": int(backtest_end_time.timestamp()),
-            }
-        )
-        result = self._get_results_dict(
-            backtesting,
-            bt_results,
-            self.min_date,
-            self.max_date,
-            params_dict,
-            processed=processed,
-        )
-        result["runtime_s"] = int(backtest_end_time.timestamp()) - int(
-            backtest_start_time.timestamp()
-        )
+    #     ray_result_tmp = HyperoptTools.get_result_dict(
+    #         self.config,
+    #         result,
+    #         self.total_epochs,
+    #     )
+    #     # print("objective result", result)
+    #     loss = result["loss"]
+    #     ray_result_tmp["loss"] = [result["loss"]]
+    #     ray_result_tmp["profit_perc"] = [100.0 * result["total_profit"]]
 
-        ray_result_tmp = HyperoptTools.get_result_dict(
-            self.config,
-            result,
-            self.total_epochs,
-        )
-        # print("objective result", result)
-        loss = result["loss"]
-        ray_result_tmp["loss"] = [result["loss"]]
-        ray_result_tmp["profit_perc"] = [100.0 * result["total_profit"]]
+    #     ray_result = {}
+    #     for key, val in ray_result_tmp.items():
+    #         ray_result[key] = val[0]
 
-        ray_result = {}
-        for key, val in ray_result_tmp.items():
-            ray_result[key] = val[0]
+    #     # print(ray_result)
+    #     self._save_result(result)
 
-        # print(ray_result)
-        self._save_result(result)
-
-        # train.report(ray_result)
-        return ray_result
+    #     # train.report(ray_result)
+    #     return ray_result
 
     def _get_results_dict(
         self,

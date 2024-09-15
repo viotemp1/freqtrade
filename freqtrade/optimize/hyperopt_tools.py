@@ -13,6 +13,10 @@ from freqtrade.enums import HyperoptState
 from freqtrade.exceptions import OperationalException
 from freqtrade.misc import deep_merge_dicts, round_dict, safe_value_fallback2
 from freqtrade.optimize.hyperopt_epoch_filters import hyperopt_filter_epochs
+from freqtrade.optimize.optimize_reports import generate_wins_draws_losses
+from freqtrade.util import fmt_coin
+
+import tabulate
 
 
 logger = logging.getLogger(__name__)
@@ -379,8 +383,8 @@ class HyperoptTools:
         )
 
     @staticmethod
-#<<<<<<< HEAD
-#=======
+# #<<<<<<< HEAD
+# #=======
     def prepare_trials_columns(trials: DataFrame) -> DataFrame:
         trials["Best"] = ""
 
@@ -565,6 +569,7 @@ class HyperoptTools:
         trials = json_normalize(results, max_level=1)
 
         trials = HyperoptTools.prepare_trials_columns(trials)
+        # logger.warning(tabulate.tabulate(trials, headers='keys', tablefmt='psql'))
 
         trials["is_profit"] = False
         trials.loc[trials["Total_profit"] > 0, "is_profit"] = True

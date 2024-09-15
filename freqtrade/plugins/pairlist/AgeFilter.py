@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 class AgeFilter(IPairList):
-    supports_backtesting = SupportsBacktesting.NO
+    supports_backtesting = SupportsBacktesting.NO_ACTION # NO
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)

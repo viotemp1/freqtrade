@@ -86,14 +86,22 @@ with warnings.catch_warnings():
 ray_results_table_max_rows = -1  # -1 - half screen
 ray_reuse_actors = False
 
-max_used_memory = 90 # 0 or negative to deactivate, otherwise pause worker
+max_used_memory = 90  # 0 or negative to deactivate, otherwise pause worker
 
 MAX_LOSS = 100000  # just a big enough number to be bad result in loss optimization
 
 plot_metric_list = [
-    "trial_id", "Trades", "Win_Draw_Loss_Win_perc", "Avg_profit", "Profit", "Avg_duration", "loss", 
-    "Max_Drawdown_Acct", "time_total_s"
-    ]
+    "trial_id",
+    "Trades",
+    "Win_Draw_Loss_Win_perc",
+    "Avg_profit",
+    "Profit",
+    "Avg_duration",
+    "loss",
+    "Max_Drawdown_Acct",
+    "time_total_s",
+]
+
 
 def ray_setup_func():
     logger = logging.getLogger(__name__)
@@ -108,8 +116,7 @@ def ray_setup_func():
     # os.environ["FUNCTION_SIZE_WARN_THRESHOLD"] = f"{2 * 10**7}"
     # os.environ["RAY_memory_monitor_refresh_ms"] = "0" # disable memory check
     # os.environ["RAY_memory_usage_threshold"] = "1"
-    
-    
+
     return logger
 
 
@@ -208,11 +215,13 @@ class Hyperopt:
         self.print_json = self.config.get("print_json", False)
         self.plot_metric = self.config.get("plot_metric", "Profit")
         self.ray_early_stop_enable = self.config.get("ray_early_stop_enable", True)
-        self.ray_early_stop_perc = self.config.get("ray_early_stop_perc", 0.005) # 0.001
-        self.ray_early_stop_std = self.config.get("ray_early_stop_std", 0.005) # 0.001
+        self.ray_early_stop_perc = self.config.get(
+            "ray_early_stop_perc", 0.005
+        )  # 0.001
+        self.ray_early_stop_std = self.config.get("ray_early_stop_std", 0.005)  # 0.001
         self.ray_early_stop_top = self.config.get("ray_early_stop_top", 10)
         self.ray_early_stop_patience = self.config.get("ray_early_stop_patience", 0.25)
-        
+
         # self.hyperopt_table_header = 0
         # self.print_colorized = self.config.get("print_colorized", False)
 
@@ -243,7 +252,9 @@ class Hyperopt:
                 cloudpickle.register_pickle_by_value(sys.modules[modules.__module__])
                 self.hyperopt_pickle_magic(modules.__bases__)
 
-    def _save_result(self, epoch: Dict) -> None:
+    # def _save_result(self, epoch: Dict) -> None:
+    @staticmethod
+    def _save_result(epoch: Dict, results_file: Path) -> None:
         """
         Save hyperopt results to file
         Store one line per epoch.
@@ -251,7 +262,7 @@ class Hyperopt:
         :param epoch: result dictionary for this epoch.
         """
         epoch[FTHYPT_FILEVERSION] = 2
-        with self.results_file.open("a") as f:
+        with results_file.open("a") as f:
             rapidjson.dump(
                 epoch,
                 f,
@@ -260,16 +271,44 @@ class Hyperopt:
             )
             f.write("\n")
 
-        self.num_epochs_saved += 1
+        # num_epochs_saved += 1
         logger.debug(
-            f"{self.num_epochs_saved} {plural(self.num_epochs_saved, 'epoch')} "
-            f"saved to '{self.results_file}'."
+            f"{num_epochs_saved} {plural(num_epochs_saved, 'epoch')} "
+            f"saved to '{results_file}'."
         )
         # Store hyperopt filename
-        latest_filename = Path.joinpath(self.results_file.parent, LAST_BT_RESULT_FN)
+        latest_filename = Path.joinpath(results_file.parent, LAST_BT_RESULT_FN)
         file_dump_json(
-            latest_filename, {"latest_hyperopt": str(self.results_file.name)}, log=False
+            latest_filename, {"latest_hyperopt": str(results_file.name)}, log=False
         )
+        
+    # def assign_params(
+    #     self, backtesting: Backtesting, params_dict: Dict, category: str
+    # ) -> None:
+    @staticmethod
+    def assign_params(
+        backtesting: Backtesting, params_dict: Dict, category: str
+    ) -> None:
+        """
+        Assign hyperoptable parameters
+        """
+        for attr_name, attr in backtesting.strategy.enumerate_parameters(category):
+            if attr.optimize:
+                # noinspection PyProtectedMember
+                attr.value = params_dict[attr_name]
+
+    # def _get_params_dict(self, dimensions: {}, raw_params: {}) -> Dict:
+    @staticmethod
+    def _get_params_dict(dimensions: {}, raw_params: {}) -> Dict:
+        # Ensure the number of dimensions match
+        # the number of parameters in the list.
+        if len(raw_params) != len(dimensions):
+            raise ValueError("Mismatch in number of search-space dimensions.")
+
+        # Return a dict where the keys are the names of the dimensions
+        # and the values are taken from the list of parameters.
+        # return {d.name: v for d, v in zip(dimensions, raw_params)}
+        return raw_params
 
     def _get_params_details(self, params: Dict) -> Dict:
         """
@@ -632,8 +671,10 @@ class Hyperopt:
         elif isinstance(searcher_orig, str):
             searcher = searcher_orig
         else:
-            raise Exception(f"generate_estimator should return either str or tuple. Got instead {searcher_orig} - {type(searcher_orig)}")
-        
+            raise Exception(
+                f"generate_estimator should return either str or tuple. Got instead {searcher_orig} - {type(searcher_orig)}"
+            )
+
         if isinstance(searcher_orig, str):
             searchers_list = [
                 "variant_generator",
@@ -660,15 +701,17 @@ class Hyperopt:
                 import nevergrad as ng
 
                 # "pymoo_de" 'pymoo_ga' "pymoo_brkga" "pymoo_nelder-mead" "pymoo_pattern-search" "pymoo_cmaes" "pymoo_unsga3"
-                if self.searcher_param1: 
+                if self.searcher_param1:
                     if self.searcher_param1.startswith("pymoo_"):
                         search_algo = NevergradSearch(
-                                        optimizer=ng.optimizers.Pymoo(algorithm=self.searcher_param1.replace("pymoo_", "")),
-                                    )
+                            optimizer=ng.optimizers.Pymoo(
+                                algorithm=self.searcher_param1.replace("pymoo_", "")
+                            ),
+                        )
                     else:
                         search_algo = NevergradSearch(
-                                        optimizer=ng.optimizers.registry[self.searcher_param1],
-                                    )                        
+                            optimizer=ng.optimizers.registry[self.searcher_param1],
+                        )
                 else:
                     searcher_algo = tune.create_searcher(
                         searcher,
@@ -699,67 +742,92 @@ class Hyperopt:
                 )
             elif searcher == "optuna":
                 import optuna
+
                 # TPESampler NSGAIIISampler CmaEsSampler GPSampler NSGAIISampler QMCSampler
                 if self.searcher_param1:
                     if self.searcher_param1 == "NSGAIIISampler":
                         searcher_algo = tune.create_searcher(
                             searcher,
-                            sampler=optuna.samplers.NSGAIIISampler(seed=self.random_state)
+                            sampler=optuna.samplers.NSGAIIISampler(
+                                seed=self.random_state
+                            ),
                         )
                     elif self.searcher_param1 == "CmaEsSampler":
                         searcher_algo = tune.create_searcher(
                             searcher,
-                            sampler=optuna.samplers.CmaEsSampler(seed=self.random_state, warn_independent_sampling=False)
+                            sampler=optuna.samplers.CmaEsSampler(
+                                seed=self.random_state, warn_independent_sampling=False
+                            ),
                         )
                     elif self.searcher_param1 == "GPSampler":
                         searcher_algo = tune.create_searcher(
                             searcher,
-                            sampler=optuna.samplers.GPSampler(seed=self.random_state, deterministic_objective=True)
+                            sampler=optuna.samplers.GPSampler(
+                                seed=self.random_state, deterministic_objective=True
+                            ),
                         )
                     elif self.searcher_param1 == "NSGAIISampler":
                         searcher_algo = tune.create_searcher(
                             searcher,
-                            sampler=optuna.samplers.NSGAIISampler(seed=self.random_state)
+                            sampler=optuna.samplers.NSGAIISampler(
+                                seed=self.random_state
+                            ),
                         )
                     elif self.searcher_param1 == "TPESampler":
                         searcher_algo = tune.create_searcher(
                             searcher,
-                            sampler=optuna.samplers.TPESampler(seed=self.random_state, multivariate=True) # , group=True
+                            sampler=optuna.samplers.TPESampler(
+                                seed=self.random_state, multivariate=True
+                            ),  # , group=True
                         )
                     elif self.searcher_param1 == "QMCSampler":
                         searcher_algo = tune.create_searcher(
                             searcher,
-                            sampler=optuna.samplers.QMCSampler(seed=self.random_state, warn_independent_sampling=False)
+                            sampler=optuna.samplers.QMCSampler(
+                                seed=self.random_state, warn_independent_sampling=False
+                            ),
                         )
                     elif self.searcher_param1 == "BoTorchSampler":
-                        from optuna.exceptions import ExperimentalWarning as o_ExperimentalWarning
-                        warnings.filterwarnings("ignore", category=o_ExperimentalWarning)
+                        from optuna.exceptions import (
+                            ExperimentalWarning as o_ExperimentalWarning,
+                        )
+
+                        warnings.filterwarnings(
+                            "ignore", category=o_ExperimentalWarning
+                        )
                         searcher_algo = tune.create_searcher(
                             searcher,
-                            sampler=optuna.integration.BoTorchSampler(seed=self.random_state)
+                            sampler=optuna.integration.BoTorchSampler(
+                                seed=self.random_state
+                            ),
                         )
-                    else: # default
+                    else:  # default
                         searcher_algo = tune.create_searcher(
                             searcher,
-                            sampler=optuna.samplers.TPESampler(seed=self.random_state, multivariate=True) # default
+                            sampler=optuna.samplers.TPESampler(
+                                seed=self.random_state, multivariate=True
+                            ),  # default
                         )
-            elif searcher == "hebo": # gp gpy gpy_mlp psgld svidkl deep_ensemble rf catboost svgp mcbn masked_deep_ensemble fe_deep_ensemble gumbel
+            elif (
+                searcher == "hebo"
+            ):  # gp gpy gpy_mlp psgld svidkl deep_ensemble rf catboost svgp mcbn masked_deep_ensemble fe_deep_ensemble gumbel
                 import hebo
                 import torch  # hebo has torch as a dependency
+
                 # gp gpy gpy_mlp psgld svidkl deep_ensemble rf catboost svgp mcbn masked_deep_ensemble fe_deep_ensemble gumbel
                 if self.searcher_param1:
                     searcher_algo = tune.create_searcher(
                         searcher,
                         random_state_seed=self.random_state,
                         model_name=self.searcher_param1,
-                        scramble_seed=self.random_state
+                        scramble_seed=self.random_state,
                     )
-                else: # default
+                else:  # default
                     searcher_algo = tune.create_searcher(
                         searcher,
                         random_state_seed=self.random_state,
                         model_name="gp",
-                        scramble_seed=self.random_state
+                        scramble_seed=self.random_state,
                     )
             else:
                 searcher_algo = tune.create_searcher(
@@ -872,21 +940,22 @@ class Hyperopt:
 
             trainable_with_parameters = tune.with_parameters(
                 objective,
-                config_ft = self.config,
+                config_ft=self.config,
                 backtesting=self.backtesting,
                 custom_trade_info=(
                     self.backtesting.strategy.custom_trade_info
                     if hasattr(self.backtesting.strategy, "custom_trade_info")
                     else None
                 ),
-                dimensions_ft = self.dimensions,
-                data_pickle_file_ft = self.data_pickle_file,
-                min_date_ft = self.min_date,
-                max_date_ft = self.max_date,
-                total_epochs_ft = self.total_epochs,
-                custom_hyperopt_ft = self.custom_hyperopt,
+                dimensions_ft=self.dimensions,
+                data_pickle_file_ft=self.data_pickle_file,
+                min_date_ft=self.min_date,
+                max_date_ft=self.max_date,
+                total_epochs_ft=self.total_epochs,
+                custom_hyperopt_ft=self.custom_hyperopt,
                 _get_results_dict_ft = self._get_results_dict,
-                _save_result_ft = self._save_result,
+                # _save_result_ft=self._save_result,
+                results_file_ft = self.results_file
             )
             trainable_with_resources = tune.with_resources(
                 trainable_with_parameters, {"cpu": cpus // config_jobs}
@@ -932,12 +1001,7 @@ class Hyperopt:
                     std=self.ray_early_stop_std,
                     top=self.ray_early_stop_top,
                     mode="min",
-                    patience=(
-                        int(
-                            self.ray_early_stop_patience
-                            * self.total_epochs
-                        )
-                    ),
+                    patience=(int(self.ray_early_stop_patience * self.total_epochs)),
                 )
             else:
                 stop_cb = None
@@ -1060,27 +1124,6 @@ class Hyperopt:
         # print(self.current_best_epoch.metrics)
         # {'Trades': '4681', 'Win_Draw_Loss_Win_perc': '3517     0  1164  75.1', 'Avg_profit': '  3.12%', 'Profit': '195340381.096 USDT (19,534,038.11%)', 'Avg_duration': '0 days 21:49:00', 'Objective': '-38,157,864.48667', 'is_profit': True, 'Max_Drawdown_Acct': '  5274021.894 USDT    (5.18%)', 'loss': -38157864.486667246, 'timestamp': 1718690291, 'checkpoint_dir_name': None, 'done': True, 'training_iteration': 1, 'trial_id': '06452780', 'date': '2024-06-18_08-58-11', 'time_this_iter_s': 61.3154194355011, 'time_total_s': 61.3154194355011, 'pid': 1931179, 'hostname': 'vioUbuntu2', 'node_ip': '10.0.0.251', 'config': {'buy_fastk_rsi_patterns': 95, 'buy_max_slippage': 1.075, 'buy_prev_cbuys_count': 3, 'buy_prev_cbuys_rwindow': 5, 'buy_prev_min_close_age': 8, 'buy_prev_min_close_perc': 37.4, 'buy_prev_min_close_rwindow': 5, 'buy_proposed_stake_limit': 3731, 'buy_proposed_stake_limit_margin': 0.208, 'csl_5_step1_SL': 0.052, 'csl_5_step1_time': 591.366, 'csl_5_step2_SL': 0.035, 'csl_5_step2_time': 1625.187, 'csl_5_step3_SL': 0.075, 'csl_5_step3_time': 3717.144, 'csl_5_step4_SL': 0.248, 'sell_order_max_age': 2.8, 'sell_order_min_profit': 0.06, 'stoploss': -0.097}, 'time_since_restore': 61.3154194355011, 'iterations_since_restore': 1, 'experiment_tag': '139_buy_fastk_rsi_patterns=95,buy_max_slippage=1.0750,buy_prev_cbuys_count=3,buy_prev_cbuys_rwindow=5,buy_prev_min_close_age=8,buy_prev_min_close_perc=37.4000,buy_prev_min_close_rwindow=5,buy_proposed_stake_limit=3731,buy_proposed_stake_limit_margin=0.2080,csl_5_step1_SL=0.0520,csl_5_step1_time=591.3660,csl_5_step2_SL=0.0350,csl_5_step2_time=1625.1870,csl_5_step3_SL=0.0750,csl_5_step3_time=3717.1440,csl_5_step4_SL=0.2480,sell_order_max_age=2.8000,sell_order_min_profit=0.0600,stoploss=-0.0970'}
 
-def assign_params(
-    backtesting: Backtesting, params_dict: Dict, category: str
-) -> None:
-    """
-    Assign hyperoptable parameters
-    """
-    for attr_name, attr in backtesting.strategy.enumerate_parameters(category):
-        if attr.optimize:
-            # noinspection PyProtectedMember
-            attr.value = params_dict[attr_name]
-
-def _get_params_dict(dimensions: {}, raw_params: {}) -> Dict:
-    # Ensure the number of dimensions match
-    # the number of parameters in the list.
-    if len(raw_params) != len(dimensions):
-        raise ValueError("Mismatch in number of search-space dimensions.")
-
-    # Return a dict where the keys are the names of the dimensions
-    # and the values are taken from the list of parameters.
-    # return {d.name: v for d, v in zip(dimensions, raw_params)}
-    return raw_params
 
 # class myObjective():
 #     def __init__(
@@ -1088,10 +1131,21 @@ def _get_params_dict(dimensions: {}, raw_params: {}) -> Dict:
 #     ) -> None:
 #         self.config_ft = config_ft
 
+
 def objective(
-    config: Dict[str, Any], config_ft: Dict, backtesting: Backtesting, custom_trade_info: Dict, dimensions_ft: Dict, 
-    data_pickle_file_ft: str, min_date_ft: str, max_date_ft: str, total_epochs_ft: int,
-    custom_hyperopt_ft: Any, _get_results_dict_ft: Any, _save_result_ft: Any
+    config: Dict[str, Any],
+    config_ft: Dict,
+    backtesting: Backtesting,
+    custom_trade_info: Dict,
+    dimensions_ft: Dict,
+    data_pickle_file_ft: str,
+    min_date_ft: str,
+    max_date_ft: str,
+    total_epochs_ft: int,
+    custom_hyperopt_ft: Any,
+    _get_results_dict_ft: Any,
+    # _save_result_ft: Any,
+    results_file_ft: Path
 ) -> Dict[str, Any]:
     """
     Used Optimize function.
@@ -1107,8 +1161,10 @@ def objective(
         logger.warning(f"objective paused - high memory usage {mem_used}")
         while psutil.virtual_memory().percent > max_used_memory:
             sleep(60)
-        logger.warning(f"objective resumed - memory usage {psutil.virtual_memory().percent}")
-    
+        logger.warning(
+            f"objective resumed - memory usage {psutil.virtual_memory().percent}"
+        )
+
     # print(f"objective start - {os.getcwd()}")
     logger.info(f"objective start - {os.getcwd()}")
     if custom_trade_info is not None:
@@ -1116,17 +1172,18 @@ def objective(
 
     HyperoptStateContainer.set_state(HyperoptState.OPTIMIZE)
     backtest_start_time = datetime.now(timezone.utc)
-    params_dict = _get_params_dict(dimensions_ft, config)
+    params_dict = Hyperopt._get_params_dict(dimensions_ft, config)
+    # logger.info(f"params_dict - {params_dict}")
 
     # Apply parameters
     if HyperoptTools.has_space(config_ft, "buy"):
-        assign_params(backtesting, params_dict, "buy")
+        Hyperopt.assign_params(backtesting, params_dict, "buy")
 
     if HyperoptTools.has_space(config_ft, "sell"):
-        assign_params(backtesting, params_dict, "sell")
+        Hyperopt.assign_params(backtesting, params_dict, "sell")
 
     if HyperoptTools.has_space(config_ft, "protection"):
-        assign_params(backtesting, params_dict, "protection")
+        Hyperopt.assign_params(backtesting, params_dict, "protection")
 
     if HyperoptTools.has_space(config_ft, "roi"):
         backtesting.strategy.minimal_roi = custom_hyperopt_ft.generate_roi_table(
@@ -1149,8 +1206,7 @@ def objective(
 
     if HyperoptTools.has_space(config_ft, "trades"):
         if config_ft["stake_amount"] == "unlimited" and (
-            params_dict["max_open_trades"] == -1
-            or params_dict["max_open_trades"] == 0
+            params_dict["max_open_trades"] == -1 or params_dict["max_open_trades"] == 0
         ):
             # Ignore unlimited max open trades if stake amount is unlimited
             params_dict.update({"max_open_trades": config_ft["max_open_trades"]})
@@ -1168,6 +1224,8 @@ def objective(
 
         backtesting.strategy.max_open_trades = updated_max_open_trades
 
+    # logger.warning(f"params_dict - {params_dict}")
+    
     with data_pickle_file_ft.open("rb") as f:
         processed = load(f, mmap_mode="r")
         # if self.analyze_per_epoch:
@@ -1211,26 +1269,36 @@ def objective(
         ray_result[key] = val[0]
 
     # print(ray_result)
-    _save_result_ft(result)
+    # _save_result_ft(result, results_file_ft)
 
     # train.report(ray_result)
     return ray_result
 
+
 # https://github.com/Textualize/rich/discussions/482
 class myLoggerCallback(LoggerCallback):
     def __init__(
-        self, strategy="", print_all=False, total_epochs=-1, table_max_rows=-1, plot_metric=""
+        self,
+        strategy="",
+        print_all=False,
+        total_epochs=-1,
+        table_max_rows=-1,
+        plot_metric="",
     ) -> None:
 
         self.console_width = Console().width
         self.console_height = Console().height
-        
+
         if table_max_rows <= 0:
             table_max_rows = self.console_height // 3
 
         self.trial_results = deque(maxlen=table_max_rows)  # []
-        self.plot_trial_results = [] # deque(maxlen=min(int(0.9*self.console_width), self.console_width-14)) # 
-        self.plot_trial_results_len = min(int(0.9*self.console_width), self.console_width-14)
+        self.plot_trial_results = (
+            []
+        )  # deque(maxlen=min(int(0.9*self.console_width), self.console_width-14)) #
+        self.plot_trial_results_len = min(
+            int(0.9 * self.console_width), self.console_width - 14
+        )
         self.best_loss = MAX_LOSS
         self.print_all = print_all
         self.plot_metric = plot_metric
@@ -1296,7 +1364,7 @@ class myLoggerCallback(LoggerCallback):
         )
         for col in self.table_columns:
             self.table.add_column(col)
-        
+
         for result in self.trial_results:
             self.table.add_row(*result)
 
@@ -1307,15 +1375,22 @@ class myLoggerCallback(LoggerCallback):
             if self.plot_metric in plot_metric_list:
                 plot_list = []
             else:
-                logger.error(f"plot_metric {self.plot_metric} not in {plot_metric_list}")
+                logger.error(
+                    f"plot_metric {self.plot_metric} not in {plot_metric_list}"
+                )
                 self.plot_metric = ""
 
         if plot_list is not None:
             for result in self.plot_trial_results:
                 if self.plot_metric == "Profit":
-                    profit = result # [plot_metric_list.index(self.plot_metric)]
+                    profit = result  # [plot_metric_list.index(self.plot_metric)]
                     try:
-                        profit = profit.split("(")[1].replace(")", "").replace("%", "").replace(",", "")
+                        profit = (
+                            profit.split("(")[1]
+                            .replace(")", "")
+                            .replace("%", "")
+                            .replace(",", "")
+                        )
                         profit = float(profit)
                         plot_list.append(profit)
                     except:
@@ -1323,20 +1398,23 @@ class myLoggerCallback(LoggerCallback):
                         # profit = math.nan
                         pass
                 else:
-                    plot_list.append(result) # [plot_metric_list.index(self.plot_metric)]
+                    plot_list.append(
+                        result
+                    )  # [plot_metric_list.index(self.plot_metric)]
 
-        
         # print("plot_metric", self.plot_metric, "len trial_results", len(self.trial_results),  "plot_list", plot_list)
         if plot_list and len(self.plot_trial_results) > 1:
             try:
                 # plot_list = plot_list[-int(0.9*self.console_width):]
-                plot = acp.plot(self.resize_list(plot_list, self.plot_trial_results_len), {'height': self.console_height // 4, 'format':'{:.4e}'})
+                plot = acp.plot(
+                    self.resize_list(plot_list, self.plot_trial_results_len),
+                    {"height": self.console_height // 4, "format": "{:.4e}"},
+                )
                 self.table_master.add_row(plot)
             except Exception as e:
                 logger.error(repr(e))
                 pass
 
-        
         progress = int(self.count_trials * self.live.console.width / self.total_epochs)
         table_progress = Table(
             show_header=False, expand=True, pad_edge=False, show_lines=False, box=None
@@ -1388,7 +1466,7 @@ class myLoggerCallback(LoggerCallback):
             self.live.update(self.table_master, refresh=True)
 
     def append_trial_results(self, trial_id, result):
-        loss = result['loss']
+        loss = result["loss"]
         if abs(loss) > 100:
             loss = f"{result['loss']:,.6e}"
         else:
@@ -1413,7 +1491,7 @@ class myLoggerCallback(LoggerCallback):
         #     f"Results for trial {trial} / iteration {iteration} / count trials = {self.count_trials}"
         # )
         # print(f"result: {result}")
-        
+
         if self.print_all:
             self.append_trial_results(self.count_trials, result)
         elif result["loss"] < self.best_loss:
@@ -1430,8 +1508,6 @@ class myLoggerCallback(LoggerCallback):
     def on_experiment_end(self, trials, **info):
         if self.live.is_started:
             self.live.stop()
-
-
 
 
 class ExperimentPlateauStopper(Stopper):

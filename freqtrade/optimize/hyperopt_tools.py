@@ -7,7 +7,7 @@ from typing import Any
 
 import numpy as np
 import rapidjson
-from pandas import isna, json_normalize
+from pandas import isna, json_normalize, DataFrame
 
 from freqtrade.constants import FTHYPT_FILEVERSION, Config
 from freqtrade.enums import HyperoptState
@@ -380,7 +380,7 @@ class HyperoptTools:
         )
 
     @staticmethod
-    def prepare_trials_columns(trials: pd.DataFrame) -> pd.DataFrame:
+    def prepare_trials_columns(trials: DataFrame) -> DataFrame:
         trials["Best"] = ""
 
         if "results_metrics.winsdrawslosses" not in trials.columns:

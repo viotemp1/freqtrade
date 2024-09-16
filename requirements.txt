@@ -63,3 +63,5 @@ ast-comments==1.2.2
 packaging==24.2
 
 filelock
+ray[default]
+ray[tune]

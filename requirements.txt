@@ -71,3 +71,4 @@ packaging==24.1
 filelock
 ray[default]
 ray[tune]
+optuna

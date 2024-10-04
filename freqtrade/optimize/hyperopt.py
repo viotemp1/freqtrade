@@ -96,6 +96,7 @@ plot_metric_list = [
     "Win_Draw_Loss_Win_perc",
     "Avg_profit",
     "Profit",
+    "Winrate",
     "Avg_duration",
     "loss",
     "Max_Drawdown_Acct",
@@ -1057,6 +1058,7 @@ class Hyperopt:
                 "Win_Draw_Loss_Win_perc",
                 "Avg_profit",
                 "Profit",
+                "Winrate",
                 "Avg_duration",
                 "Objective",
                 "Max_Drawdown_Acct",
@@ -1304,6 +1306,7 @@ class myLoggerCallback(LoggerCallback):
             "Win  Draw  Loss  Win%",
             "Avg profit",
             "Profit",
+            "Winrate",
             "Avg duration",
             "Objective",
             "Max Drawdown (Acct)",
@@ -1315,7 +1318,7 @@ class myLoggerCallback(LoggerCallback):
 
     def generate_empty_table(self) -> Table:
         return Table(
-            title=f"{self.strategy} - Epoch: {self.count_trials}/{self.total_epochs} - Best: {self.best_epoch}",
+            title=f"{self.strategy} {self.plot_metric} - Epoch: {self.count_trials}/{self.total_epochs} - Best: {self.best_epoch}",
             show_header=False,
             padding=(0, 0),
             expand=True,
@@ -1328,7 +1331,7 @@ class myLoggerCallback(LoggerCallback):
             for i in range(0, len(list_in), n_averaged_elements):
                 slice_from_index = i
                 slice_to_index = slice_from_index + n_averaged_elements
-                if self.plot_metric == "Profit":
+                if self.plot_metric in ["Profit", "Winrate"]:
                     list_out.append(np.max(list_in[slice_from_index:slice_to_index]))
                 elif self.plot_metric == "loss":
                     list_out.append(np.min(list_in[slice_from_index:slice_to_index]))
@@ -1383,6 +1386,7 @@ class myLoggerCallback(LoggerCallback):
                         # profit = math.nan
                         pass
                 else:
+                    result = float(result)
                     plot_list.append(
                         result
                     )  # [plot_metric_list.index(self.plot_metric)]
@@ -1463,6 +1467,7 @@ class myLoggerCallback(LoggerCallback):
                 f"{result['Win_Draw_Loss_Win_perc']}",
                 f"{result['Avg_profit']}",
                 f"{result['Profit']}",
+                f"{(result['Winrate']):,.2f}",
                 f"{result['Avg_duration']}",
                 loss,
                 f"{result['Max_Drawdown_Acct']}",
@@ -1470,6 +1475,10 @@ class myLoggerCallback(LoggerCallback):
             )
         )
 
+    def on_trial_start(self, iteration, trials, trial, **info):
+        self.generate_table()
+        self.live.update(self.table_master, refresh=True)
+    
     def on_trial_result(self, iteration, trials, trial, result, **info):
         self.count_trials += 1  # len(trials)
         # print(

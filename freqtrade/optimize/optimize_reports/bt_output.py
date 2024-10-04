@@ -43,6 +43,14 @@ def generate_wins_draws_losses(wins, draws, losses):
         wl_ratio = f"{100.0 / (wins + draws + losses) * wins:.1f}" if losses > 0 else "100"
     return f"{wins:>4}  {draws:>4}  {losses:>4}  {wl_ratio:>4}"
 
+def generate_wins_draws_losses1(wins, draws, losses):
+    if wins > 0 and losses == 0:
+        wl_ratio = 100
+    elif wins == 0:
+        wl_ratio = 0
+    else:
+        wl_ratio = 100.0 / (wins + draws + losses) * wins if losses > 0 else 100
+    return wl_ratio
 
 def text_table_bt_results(
     pair_results: List[Dict[str, Any]], stake_currency: str, title: str

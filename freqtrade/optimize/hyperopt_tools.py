@@ -13,7 +13,7 @@ from freqtrade.enums import HyperoptState
 from freqtrade.exceptions import OperationalException
 from freqtrade.misc import deep_merge_dicts, round_dict, safe_value_fallback2
 from freqtrade.optimize.hyperopt_epoch_filters import hyperopt_filter_epochs
-from freqtrade.optimize.optimize_reports import generate_wins_draws_losses
+from freqtrade.optimize.optimize_reports import generate_wins_draws_losses, generate_wins_draws_losses1
 from freqtrade.util import fmt_coin
 
 import tabulate
@@ -406,6 +406,12 @@ class HyperoptTools:
             ),
             axis=1,
         )
+        trials["results_metrics.winrate"] = trials.apply(
+            lambda x: generate_wins_draws_losses1(
+                x["results_metrics.wins"], x["results_metrics.draws"], x["results_metrics.losses"]
+            ),
+            axis=1,
+        )
 
         trials = trials[
             [
@@ -416,6 +422,7 @@ class HyperoptTools:
                 "results_metrics.profit_mean",
                 "results_metrics.profit_total_abs",
                 "results_metrics.profit_total",
+                "results_metrics.winrate",
                 "results_metrics.holding_avg",
                 "results_metrics.max_drawdown_account",
                 "results_metrics.max_drawdown_abs",
@@ -434,6 +441,7 @@ class HyperoptTools:
             "Avg_profit",
             "Total_profit",
             "Profit",
+            "Winrate",
             "Avg_duration",
             "max_drawdown_account",
             "max_drawdown_abs",

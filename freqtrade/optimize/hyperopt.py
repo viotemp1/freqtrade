@@ -20,6 +20,7 @@ import psutil
 from time import sleep
 
 import rapidjson
+
 # from joblib import Parallel, cpu_count, delayed, dump, load, wrap_non_picklable_objects
 from colorama import init as colorama_init
 from joblib import cpu_count, dump, load
@@ -187,8 +188,13 @@ class Hyperopt:
             / "hyperopt_results"
             / "hyperopt_tickerdata.pkl"
         )
-        self.total_epochs = config.get("epochs", 0)
+        self.hyperopt_results_file: Path = (
+            Path(self.config["user_data_dir"]).parent 
+            / "csv"
+            / "hyperopt_results.csv"
+        )
 
+        self.total_epochs = config.get("epochs", 0)
         self.current_best_loss = 100
 
         self.clean_hyperopt()
@@ -215,6 +221,7 @@ class Hyperopt:
         self.print_hyperopt_results = self.config.get("print_hyperopt_results", True)
         self.print_json = self.config.get("print_json", False)
         self.plot_metric = self.config.get("plot_metric", "Profit")
+        self.save_results_to_csv = self.config.get("save_results_to_csv", True)
         self.ray_early_stop_enable = self.config.get("ray_early_stop_enable", True)
         self.ray_early_stop_perc = self.config.get(
             "ray_early_stop_perc", 0.005
@@ -282,7 +289,7 @@ class Hyperopt:
         file_dump_json(
             latest_filename, {"latest_hyperopt": str(results_file.name)}, log=False
         )
-        
+
     @staticmethod
     def assign_params(
         backtesting: Backtesting, params_dict: Dict, category: str
@@ -372,7 +379,6 @@ class Hyperopt:
             # print("max_open_trades", result["max_open_trades"])
         # print("_get_no_optimize_details result", result)
         return result
-
 
     def init_spaces(self):
         """
@@ -939,9 +945,9 @@ class Hyperopt:
                 max_date_ft=self.max_date,
                 total_epochs_ft=self.total_epochs,
                 custom_hyperopt_ft=self.custom_hyperopt,
-                _get_results_dict_ft = self._get_results_dict,
+                _get_results_dict_ft=self._get_results_dict,
                 # _save_result_ft=self._save_result,
-                results_file_ft = self.results_file
+                results_file_ft=self.results_file,
             )
             trainable_with_resources = tune.with_resources(
                 trainable_with_parameters, {"cpu": cpus // config_jobs}
@@ -965,7 +971,7 @@ class Hyperopt:
                 logging_level="info",
                 log_to_driver=True,
             )
-#>>>>>>> b54fc2d8c (hyperopt ray)
+            # >>>>>>> b54fc2d8c (hyperopt ray)
 
             if self.print_hyperopt_results or self.print_all or self.plot_chart:
                 r_callbacks = [
@@ -1051,6 +1057,22 @@ class Hyperopt:
         # print(df_results.columns)
         df_results = df_results.sort_values(by="loss", ascending=True).head(1)
         df_results["training_iteration"] = df_results.index
+        if self.save_results_to_csv and len(df_results) > 0:
+            if not Path(self.hyperopt_results_file).is_file():
+                df_results.to_csv(
+                    self.hyperopt_results_file,
+                    encoding="utf-8",
+                    index=False,
+                )
+            else:
+                df_results.to_csv(
+                    self.hyperopt_results_file,
+                    encoding="utf-8",
+                    index=False,
+                    mode="a",
+                    header=False,
+                )
+
         df_results = df_results[
             [
                 "training_iteration",
@@ -1132,7 +1154,7 @@ def objective(
     custom_hyperopt_ft: Any,
     _get_results_dict_ft: Any,
     # _save_result_ft: Any,
-    results_file_ft: Path
+    results_file_ft: Path,
 ) -> Dict[str, Any]:
     """
     Used Optimize function.
@@ -1212,7 +1234,7 @@ def objective(
         backtesting.strategy.max_open_trades = updated_max_open_trades
 
     # logger.warning(f"params_dict - {params_dict}")
-    
+
     with data_pickle_file_ft.open("rb") as f:
         processed = load(f, mmap_mode="r")
         # if self.analyze_per_epoch:
@@ -1478,7 +1500,7 @@ class myLoggerCallback(LoggerCallback):
     def on_trial_start(self, iteration, trials, trial, **info):
         self.generate_table()
         self.live.update(self.table_master, refresh=True)
-    
+
     def on_trial_result(self, iteration, trials, trial, result, **info):
         self.count_trials += 1  # len(trials)
         # print(

@@ -177,11 +177,11 @@ class Hyperopt:
         )
         self.calculate_loss = self.custom_hyperoptloss.hyperopt_loss_function
         time_now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        strategy = str(self.config["strategy"])
+        self.strategy_name = str(self.config["strategy"])
         self.results_file: Path = (
             self.config["user_data_dir"]
             / "hyperopt_results"
-            / f"strategy_{strategy}_{time_now}.fthypt"
+            / f"strategy_{self.strategy_name}_{time_now}.fthypt"
         )
         self.data_pickle_file = (
             self.config["user_data_dir"]
@@ -189,9 +189,7 @@ class Hyperopt:
             / "hyperopt_tickerdata.pkl"
         )
         self.hyperopt_results_file: Path = (
-            Path(self.config["user_data_dir"]).parent 
-            / "csv"
-            / "hyperopt_results.csv"
+            Path(self.config["user_data_dir"]).parent / "csv" / "hyperopt_results.csv"
         )
 
         self.total_epochs = config.get("epochs", 0)
@@ -469,132 +467,6 @@ class Hyperopt:
                 raise Exception(
                     f"Unknown search space {original_dim} / {type(original_dim)}"
                 )
-
-    # def objective(
-    #     self, config: Dict[str, Any], backtesting: Backtesting, custom_trade_info: Dict
-    # ) -> Dict[str, Any]:
-    #     """
-    #     Used Optimize function.
-    #     Called once per epoch to optimize whatever is configured.
-    #     Keep this function as optimized as possible!
-    #     """
-
-    #     logger = ray_setup_func()
-    #     os.chdir(Path(self.config["user_data_dir"]).parent.absolute())
-
-    #     mem_used = psutil.virtual_memory().percent
-    #     if max_used_memory > 0 and mem_used > max_used_memory:
-    #         logger.warning(f"objective paused - high memory usage {mem_used}")
-    #         while psutil.virtual_memory().percent > max_used_memory:
-    #             sleep(60)
-    #         logger.warning(f"objective resumed - memory usage {psutil.virtual_memory().percent}")
-
-    #     # print(f"objective start - {os.getcwd()}")
-    #     logger.info(f"objective start - {os.getcwd()}")
-    #     if custom_trade_info is not None:
-    #         backtesting.strategy.custom_trade_info = custom_trade_info
-
-    #     HyperoptStateContainer.set_state(HyperoptState.OPTIMIZE)
-    #     backtest_start_time = datetime.now(timezone.utc)
-    #     params_dict = self._get_params_dict(self.dimensions, config)
-
-    #     # Apply parameters
-    #     if HyperoptTools.has_space(self.config, "buy"):
-    #         self.assign_params(backtesting, params_dict, "buy")
-
-    #     if HyperoptTools.has_space(self.config, "sell"):
-    #         self.assign_params(backtesting, params_dict, "sell")
-
-    #     if HyperoptTools.has_space(self.config, "protection"):
-    #         self.assign_params(backtesting, params_dict, "protection")
-
-    #     if HyperoptTools.has_space(self.config, "roi"):
-    #         backtesting.strategy.minimal_roi = self.custom_hyperopt.generate_roi_table(
-    #             params_dict
-    #         )
-
-    #     if HyperoptTools.has_space(self.config, "stoploss"):
-    #         backtesting.strategy.stoploss = params_dict["stoploss"]
-
-    #     if HyperoptTools.has_space(self.config, "trailing"):
-    #         d = self.custom_hyperopt.generate_trailing_params(params_dict)
-    #         backtesting.strategy.trailing_stop = d["trailing_stop"]
-    #         backtesting.strategy.trailing_stop_positive = d["trailing_stop_positive"]
-    #         backtesting.strategy.trailing_stop_positive_offset = d[
-    #             "trailing_stop_positive_offset"
-    #         ]
-    #         backtesting.strategy.trailing_only_offset_is_reached = d[
-    #             "trailing_only_offset_is_reached"
-    #         ]
-
-    #     if HyperoptTools.has_space(self.config, "trades"):
-    #         if self.config["stake_amount"] == "unlimited" and (
-    #             params_dict["max_open_trades"] == -1
-    #             or params_dict["max_open_trades"] == 0
-    #         ):
-    #             # Ignore unlimited max open trades if stake amount is unlimited
-    #             params_dict.update({"max_open_trades": self.config["max_open_trades"]})
-
-    #         updated_max_open_trades = (
-    #             int(params_dict["max_open_trades"])
-    #             if (
-    #                 params_dict["max_open_trades"] != -1
-    #                 and params_dict["max_open_trades"] != 0
-    #             )
-    #             else float("inf")
-    #         )
-
-    #         self.config.update({"max_open_trades": updated_max_open_trades})
-
-    #         backtesting.strategy.max_open_trades = updated_max_open_trades
-
-    #     with self.data_pickle_file.open("rb") as f:
-    #         processed = load(f, mmap_mode="r")
-    #         if self.analyze_per_epoch:
-    #             # Data is not yet analyzed, rerun populate_indicators.
-    #             processed = self.advise_and_trim(processed)
-
-    #     bt_results = backtesting.backtest(
-    #         processed=processed, start_date=self.min_date, end_date=self.max_date
-    #     )
-    #     backtest_end_time = datetime.now(timezone.utc)
-    #     bt_results.update(
-    #         {
-    #             "backtest_start_time": int(backtest_start_time.timestamp()),
-    #             "backtest_end_time": int(backtest_end_time.timestamp()),
-    #         }
-    #     )
-    #     result = self._get_results_dict(
-    #         backtesting,
-    #         bt_results,
-    #         self.min_date,
-    #         self.max_date,
-    #         params_dict,
-    #         processed=processed,
-    #     )
-    #     result["runtime_s"] = int(backtest_end_time.timestamp()) - int(
-    #         backtest_start_time.timestamp()
-    #     )
-
-    #     ray_result_tmp = HyperoptTools.get_result_dict(
-    #         self.config,
-    #         result,
-    #         self.total_epochs,
-    #     )
-    #     # print("objective result", result)
-    #     loss = result["loss"]
-    #     ray_result_tmp["loss"] = [result["loss"]]
-    #     ray_result_tmp["profit_perc"] = [100.0 * result["total_profit"]]
-
-    #     ray_result = {}
-    #     for key, val in ray_result_tmp.items():
-    #         ray_result[key] = val[0]
-
-    #     # print(ray_result)
-    #     self._save_result(result)
-
-    #     # train.report(ray_result)
-    #     return ray_result
 
     def _get_results_dict(
         self,
@@ -976,7 +848,7 @@ class Hyperopt:
             if self.print_hyperopt_results or self.print_all or self.plot_chart:
                 r_callbacks = [
                     myLoggerCallback(
-                        strategy=str(self.config["strategy"]),
+                        strategy=self.strategy_name,
                         print_all=self.print_all,
                         total_epochs=self.total_epochs,
                         table_max_rows=ray_results_table_max_rows,
@@ -1057,6 +929,18 @@ class Hyperopt:
         # print(df_results.columns)
         df_results = df_results.sort_values(by="loss", ascending=True).head(1)
         df_results["training_iteration"] = df_results.index
+        df_results["strategy_name"] = self.strategy_name
+        df_results["hyperoptloss_name"] = self.config.get("hyperopt_loss")
+        first_columns = [
+            "strategy_name",
+            "hyperoptloss_name",
+            "profit_perc",
+            "Winrate",
+            "Trades",
+        ]
+        cols = first_columns + [c for c in df_results.columns if c not in first_columns]
+        df_results = df_results[cols]
+
         if self.save_results_to_csv and len(df_results) > 0:
             if not Path(self.hyperopt_results_file).is_file():
                 df_results.to_csv(
@@ -1497,9 +1381,9 @@ class myLoggerCallback(LoggerCallback):
             )
         )
 
-    def on_trial_start(self, iteration, trials, trial, **info):
-        self.generate_table()
-        self.live.update(self.table_master, refresh=True)
+    # def on_trial_start(self, iteration, trials, trial, **info):
+    #     self.generate_table()
+    #     self.live.update(self.table_master, refresh=True)
 
     def on_trial_result(self, iteration, trials, trial, result, **info):
         self.count_trials += 1  # len(trials)

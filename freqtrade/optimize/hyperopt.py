@@ -26,6 +26,7 @@ from colorama import init as colorama_init
 from joblib import cpu_count, dump, load
 from joblib.externals import cloudpickle
 from pandas import DataFrame
+import pandas as pd
 
 from freqtrade.constants import (
     DATETIME_PRINT_FORMAT,
@@ -802,6 +803,8 @@ class Hyperopt:
             # print(f"ray.init - {os.getcwd()}")
             # print(self.backtesting.strategy.custom_trade_info)
 
+            # Path("./logs").mkdir(parents=True, exist_ok=True)
+
             trainable_with_parameters = tune.with_parameters(
                 objective,
                 config_ft=self.config,
@@ -842,6 +845,7 @@ class Hyperopt:
                 configure_logging=True,
                 logging_level="info",
                 log_to_driver=True,
+                _temp_dir=os.path.join("/tmp", "ray", self.strategy_name),
             )
             # >>>>>>> b54fc2d8c (hyperopt ray)
 
@@ -884,7 +888,7 @@ class Hyperopt:
                 param_space=self.dimensions,
                 run_config=RunConfig(
                     verbose=0,
-                    # storage_path="./logs/",
+                    storage_path=os.path.join("/tmp", "ray", self.strategy_name),
                     stop=stop_cb,
                     callbacks=r_callbacks,
                 ),
@@ -949,13 +953,23 @@ class Hyperopt:
                     index=False,
                 )
             else:
-                df_results.to_csv(
+                pd.concat(
+                    [pd.read_csv(self.hyperopt_results_file), df_results],
+                    axis=0,
+                    ignore_index=True,
+                ).to_csv(
                     self.hyperopt_results_file,
-                    encoding="utf-8",
+                    header=True,
                     index=False,
-                    mode="a",
-                    header=False,
+                    encoding="utf-8",
                 )
+                # df_results.to_csv(
+                #     self.hyperopt_results_file,
+                #     encoding="utf-8",
+                #     index=False,
+                #     mode="a",
+                #     header=False,
+                # )
 
         df_results = df_results[
             [

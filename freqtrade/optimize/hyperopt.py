@@ -1169,6 +1169,7 @@ def objective(
     # print("objective result", result)
     loss = result["loss"]
     ray_result_tmp["loss"] = [result["loss"]]
+    ray_result_tmp["params_dict"] = [str(result["params_dict"])]
     ray_result_tmp["profit_perc"] = [100.0 * result["total_profit"]]
 
     ray_result = {}

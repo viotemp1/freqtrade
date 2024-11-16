@@ -91,7 +91,9 @@ ray_reuse_actors = False
 
 max_used_memory = 90  # 0 or negative to deactivate, otherwise pause worker
 
-MAX_LOSS = 100000  # just a big enough number to be bad result in loss optimization
+MAX_LOSS = (
+    100000  # just a big enough number to be bad result in loss optimization
+)
 
 plot_metric_list = [
     "trial_id",
@@ -116,7 +118,9 @@ def ray_setup_func():
     os.environ["RAY_DEDUP_LOGS"] = "0"
     # os.environ["RAY_ENABLE_RECORD_ACTOR_TASK_LOGGING"] = "1"
     # os.environ["TUNE_DISABLE_AUTO_CALLBACK_LOGGERS"] = "1"
-    os.environ["TUNE_MAX_PENDING_TRIALS_PG"] = f"{max(4,cpu_count()//4)}" # f"{max(4,cpu_count()//2)}" 2
+    os.environ["TUNE_MAX_PENDING_TRIALS_PG"] = (
+        f"{max(4,cpu_count()//4)}"  # f"{max(4,cpu_count()//2)}" 2
+    )
     # os.environ["FUNCTION_SIZE_WARN_THRESHOLD"] = f"{2 * 10**7}"
     # os.environ["RAY_memory_monitor_refresh_ms"] = "0" # disable memory check
     # os.environ["RAY_memory_usage_threshold"] = "1"
@@ -175,7 +179,9 @@ class Hyperopt:
         self.backtesting._set_strategy(self.backtesting.strategylist[0])
         self.custom_hyperopt.strategy = self.backtesting.strategy
 
-        self.hyperopt_pickle_magic(self.backtesting.strategy.__class__.__bases__)
+        self.hyperopt_pickle_magic(
+            self.backtesting.strategy.__class__.__bases__
+        )
         self.custom_hyperoptloss: IHyperOptLoss = (
             HyperOptLossResolver.load_hyperoptloss(self.config)
         )
@@ -199,7 +205,9 @@ class Hyperopt:
         )
 
         self.hyperopt_results_file: Path = (
-            Path(self.config["user_data_dir"]).parent / "csv" / "hyperopt_results.csv"
+            Path(self.config["user_data_dir"]).parent
+            / "csv"
+            / "hyperopt_results.csv"
         )
         self.ray_log_dir = os.path.join("/tmp", "ray", self.strategy_name)
 
@@ -241,16 +249,25 @@ class Hyperopt:
                 "plot_metric", "Profit"
             )  # Profit Winrate
         self.save_results_to_csv = self.config.get("save_results_to_csv", True)
-        self.ray_early_stop_enable = self.config.get("ray_early_stop_enable", True)
+        self.ray_early_stop_enable = self.config.get(
+            "ray_early_stop_enable", True
+        )
         self.ray_early_stop_perc = self.config.get(
             "ray_early_stop_perc", 0.005
         )  # 0.001
-        self.ray_early_stop_std = self.config.get("ray_early_stop_std", 0.005)  # 0.001
+        self.ray_early_stop_std = self.config.get(
+            "ray_early_stop_std", 0.005
+        )  # 0.001
         self.ray_early_stop_top = self.config.get("ray_early_stop_top", 10)
-        self.ray_early_stop_patience = self.config.get("ray_early_stop_patience", 0.25)
+        self.ray_early_stop_patience = self.config.get(
+            "ray_early_stop_patience", 0.25
+        )
         self.ray_dashboard = self.config.get("ray_dashboard", False)
         self.ray_dashboard_port = self.config.get("ray_dashboard_port", 8265)
-        ray_max_memory_perc = max(float(config.get("ray_max_memory", 0.8)), float(os.environ.get("RAY_MAX_MEMORY_PERC", 0.8)))
+        ray_max_memory_perc = max(
+            float(config.get("ray_max_memory", 0.8)),
+            float(os.environ.get("RAY_MAX_MEMORY_PERC", 0.8)),
+        )
         if ray_max_memory_perc is not None:
             try:
                 self.ray_max_memory = psutil.virtual_memory().total * float(
@@ -272,7 +289,9 @@ class Hyperopt:
 
     @staticmethod
     def trial_str_creator(strategy_name, trial):
-        return "{}_{}_{}".format(strategy_name, trial.trainable_name, trial.trial_id)
+        return "{}_{}_{}".format(
+            strategy_name, trial.trainable_name, trial.trial_id
+        )
 
     def clean_hyperopt(self) -> None:
         """
@@ -296,7 +315,9 @@ class Hyperopt:
         """
         for modules in bases:
             if modules.__name__ != "IStrategy":
-                cloudpickle.register_pickle_by_value(sys.modules[modules.__module__])
+                cloudpickle.register_pickle_by_value(
+                    sys.modules[modules.__module__]
+                )
                 self.hyperopt_pickle_magic(modules.__bases__)
 
     # def _save_result(self, epoch: Dict) -> None:
@@ -326,7 +347,9 @@ class Hyperopt:
         # Store hyperopt filename
         latest_filename = Path.joinpath(results_file.parent, LAST_BT_RESULT_FN)
         file_dump_json(
-            latest_filename, {"latest_hyperopt": str(results_file.name)}, log=False
+            latest_filename,
+            {"latest_hyperopt": str(results_file.name)},
+            log=False,
         )
 
     @staticmethod
@@ -336,7 +359,9 @@ class Hyperopt:
         """
         Assign hyperoptable parameters
         """
-        for attr_name, attr in backtesting.strategy.enumerate_parameters(category):
+        for attr_name, attr in backtesting.strategy.enumerate_parameters(
+            category
+        ):
             if attr.optimize:
                 # noinspection PyProtectedMember
                 attr.value = params_dict[attr_name]
@@ -362,7 +387,9 @@ class Hyperopt:
         if HyperoptTools.has_space(self.config, "buy"):
             result["buy"] = {p.name: params.get(p.name) for p in self.buy_space}
         if HyperoptTools.has_space(self.config, "sell"):
-            result["sell"] = {p.name: params.get(p.name) for p in self.sell_space}
+            result["sell"] = {
+                p.name: params.get(p.name) for p in self.sell_space
+            }
         if HyperoptTools.has_space(self.config, "protection"):
             result["protection"] = {
                 p.name: params.get(p.name) for p in self.protection_space
@@ -370,14 +397,18 @@ class Hyperopt:
         if HyperoptTools.has_space(self.config, "roi"):
             result["roi"] = {
                 str(k): v
-                for k, v in self.custom_hyperopt.generate_roi_table(params).items()
+                for k, v in self.custom_hyperopt.generate_roi_table(
+                    params
+                ).items()
             }
         if HyperoptTools.has_space(self.config, "stoploss"):
             result["stoploss"] = {
                 p.name: params.get(p.name) for p in self.stoploss_space
             }
         if HyperoptTools.has_space(self.config, "trailing"):
-            result["trailing"] = self.custom_hyperopt.generate_trailing_params(params)
+            result["trailing"] = self.custom_hyperopt.generate_trailing_params(
+                params
+            )
         if HyperoptTools.has_space(self.config, "trades"):
             result["max_open_trades"] = {
                 "max_open_trades": (
@@ -397,11 +428,14 @@ class Hyperopt:
 
         if not HyperoptTools.has_space(self.config, "roi"):
             result["roi"] = {
-                str(k): v for k, v in self.backtesting.strategy.minimal_roi.items()
+                str(k): v
+                for k, v in self.backtesting.strategy.minimal_roi.items()
             }
             # print("roi", result["roi"])
         if not HyperoptTools.has_space(self.config, "stoploss"):
-            result["stoploss"] = {"stoploss": self.backtesting.strategy.stoploss}
+            result["stoploss"] = {
+                "stoploss": self.backtesting.strategy.stoploss
+            }
             # print("stoploss", result["stoploss"])
         if not HyperoptTools.has_space(self.config, "trailing"):
             result["trailing"] = {
@@ -453,7 +487,9 @@ class Hyperopt:
 
         if HyperoptTools.has_space(self.config, "trades"):
             logger.debug("Hyperopt has 'trades' space")
-            self.max_open_trades_space = self.custom_hyperopt.max_open_trades_space()
+            self.max_open_trades_space = (
+                self.custom_hyperopt.max_open_trades_space()
+            )
 
         self.dimensions = {}
         dimensions = (
@@ -467,9 +503,13 @@ class Hyperopt:
         )
         for original_dim in dimensions:
             # print(original_dim.name, original_dim, type(original_dim))
-            if type(original_dim) == Integer:  # isinstance(original_dim, Integer):
+            if (
+                type(original_dim) == Integer
+            ):  # isinstance(original_dim, Integer):
                 # print("Integer", original_dim.low, original_dim.high)
-                if self.searcher == "bayesopt":  # 'bayesopt' - does not suport randint
+                if (
+                    self.searcher == "bayesopt"
+                ):  # 'bayesopt' - does not suport randint
                     logger.info(
                         f"bayesopt does not support Integer. Will convert to tune.uniform. Please change {original_dim.name} to int in your strategy"
                     )
@@ -485,7 +525,9 @@ class Hyperopt:
                 type(original_dim) == SKDecimal
             ):  # isinstance(original_dim, SKDecimal):
                 # print("SKDecimal", original_dim.low_orig, original_dim.high_orig, 1 / pow(10, original_dim.decimals))
-                if self.searcher == "bayesopt":  # 'bayesopt' - does not suport quniform
+                if (
+                    self.searcher == "bayesopt"
+                ):  # 'bayesopt' - does not suport quniform
                     self.dimensions[original_dim.name] = tune.uniform(
                         original_dim.low_orig,
                         original_dim.high_orig,
@@ -568,7 +610,9 @@ class Hyperopt:
     # 'ax' - not working
     # schedulers: ['fifo', 'async_hyperband', 'asynchyperband', 'median_stopping_rule', 'medianstopping', 'hyperband', 'hb_bohb', 'pbt', 'pbt_replay', 'pb2', 'resource_changing']
     def get_search_algo_scheduler(self, dimensions: Dict, config_jobs):
-        searcher_orig = self.custom_hyperopt.generate_estimator(dimensions=dimensions)
+        searcher_orig = self.custom_hyperopt.generate_estimator(
+            dimensions=dimensions
+        )
         searcher_param1 = None
         if isinstance(searcher_orig, tuple) and len(searcher_orig) == 2:
             searcher = searcher_orig[0]
@@ -610,12 +654,16 @@ class Hyperopt:
                     if self.searcher_param1.startswith("pymoo_"):
                         search_algo = NevergradSearch(
                             optimizer=ng.optimizers.Pymoo(
-                                algorithm=self.searcher_param1.replace("pymoo_", "")
+                                algorithm=self.searcher_param1.replace(
+                                    "pymoo_", ""
+                                )
                             ),
                         )
                     else:
                         search_algo = NevergradSearch(
-                            optimizer=ng.optimizers.registry[self.searcher_param1],
+                            optimizer=ng.optimizers.registry[
+                                self.searcher_param1
+                            ],
                         )
                 else:
                     searcher_algo = tune.create_searcher(
@@ -661,14 +709,16 @@ class Hyperopt:
                         searcher_algo = tune.create_searcher(
                             searcher,
                             sampler=optuna.samplers.CmaEsSampler(
-                                seed=self.random_state, warn_independent_sampling=False
+                                seed=self.random_state,
+                                warn_independent_sampling=False,
                             ),
                         )
                     elif self.searcher_param1 == "GPSampler":
                         searcher_algo = tune.create_searcher(
                             searcher,
                             sampler=optuna.samplers.GPSampler(
-                                seed=self.random_state, deterministic_objective=True
+                                seed=self.random_state,
+                                deterministic_objective=True,
                             ),
                         )
                     elif self.searcher_param1 == "NSGAIISampler":
@@ -689,7 +739,8 @@ class Hyperopt:
                         searcher_algo = tune.create_searcher(
                             searcher,
                             sampler=optuna.samplers.QMCSampler(
-                                seed=self.random_state, warn_independent_sampling=False
+                                seed=self.random_state,
+                                warn_independent_sampling=False,
                             ),
                         )
                     elif self.searcher_param1 == "BoTorchSampler":
@@ -758,7 +809,9 @@ class Hyperopt:
     def _set_random_state(self, random_state: Optional[int]) -> int:
         return random_state or random.randint(1, 2**16 - 1)  # noqa: S311
 
-    def advise_and_trim(self, data: Dict[str, DataFrame]) -> Dict[str, DataFrame]:
+    def advise_and_trim(
+        self, data: Dict[str, DataFrame]
+    ) -> Dict[str, DataFrame]:
         preprocessed = self.backtesting.strategy.advise_all_indicators(data)
 
         # Trim startup period from analyzed dataframe to get correct dates for output.
@@ -820,7 +873,9 @@ class Hyperopt:
 
         config_jobs = self.config.get("hyperopt_jobs", -1)
         # Searcher
-        search_algo, scheduler = self.get_search_algo_scheduler(None, config_jobs)
+        search_algo, scheduler = self.get_search_algo_scheduler(
+            None, config_jobs
+        )
         # Initialize spaces ...
         self.init_spaces()
 
@@ -841,7 +896,9 @@ class Hyperopt:
         logger.info(f"Number of parallel jobs set as: {config_jobs}")
 
         not_optimized = self.backtesting.strategy.get_no_optimize_params()
-        not_optimized = deep_merge_dicts(not_optimized, self._get_no_optimize_details())
+        not_optimized = deep_merge_dicts(
+            not_optimized, self._get_no_optimize_details()
+        )
 
         ray_setup_func()
 
@@ -873,20 +930,29 @@ class Hyperopt:
             )
             if self.ray_max_memory is None:
                 trainable_with_resources = tune.with_resources(
-                    trainable_with_parameters, {"cpu": cpus // config_jobs}
+                    trainable_with_parameters, {"CPU": cpus // config_jobs}
                 )
             else:
                 trainable_with_resources = tune.with_resources(
                     trainable_with_parameters,
-                    {
-                        "cpu": cpus // config_jobs,
-                        "memory": self.ray_max_memory // config_jobs,
-                    },
+                    tune.PlacementGroupFactory(
+                        [
+                            {
+                                "CPU": cpus // config_jobs,
+                                "memory": 0.2 * psutil.virtual_memory().total,
+                            }
+                        ]
+                    ),
+                    # {
+                    #     "cpu": cpus // config_jobs,
+                    #     "memory": self.ray_max_memory // config_jobs,
+                    # },
                 )
             ray.init(
                 ignore_reinit_error=True,
                 include_dashboard=self.ray_dashboard,
                 dashboard_port=self.ray_dashboard_port,  # None
+                object_store_memory=10**9,
                 runtime_env={
                     "worker_process_setup_hook": self.ray_worker_logging_setup_func,
                     "env_vars": {
@@ -907,7 +973,9 @@ class Hyperopt:
                 _temp_dir=self.ray_log_dir,
             )
 
-            if self.print_all or self.plot_chart:  # self.print_hyperopt_results or
+            if (
+                self.print_all or self.plot_chart
+            ):  # self.print_hyperopt_results or
                 r_callbacks = [
                     myLoggerCallback(
                         strategy=self.strategy_name,
@@ -927,7 +995,9 @@ class Hyperopt:
                     std=self.ray_early_stop_std,
                     top=self.ray_early_stop_top,
                     mode="min",
-                    patience=(int(self.ray_early_stop_patience * self.total_epochs)),
+                    patience=(
+                        int(self.ray_early_stop_patience * self.total_epochs)
+                    ),
                 )
             else:
                 stop_cb = None
@@ -989,7 +1059,9 @@ class Hyperopt:
         )
 
         # df_results = self.current_best_epoch["tune_best_result"].metrics_dataframe
-        df_results = results.get_dataframe(filter_metric="loss", filter_mode="min")
+        df_results = results.get_dataframe(
+            filter_metric="loss", filter_mode="min"
+        )
         # print(df_results.columns)
         df_results = df_results.sort_values(by="loss", ascending=True).head(1)
         df_results["training_iteration"] = df_results.index
@@ -1002,7 +1074,9 @@ class Hyperopt:
             "Winrate",
             "Trades",
         ]
-        cols = first_columns + [c for c in df_results.columns if c not in first_columns]
+        cols = first_columns + [
+            c for c in df_results.columns if c not in first_columns
+        ]
         df_results = df_results[cols]
 
         if self.save_results_to_csv and len(df_results) > 0:
@@ -1075,7 +1149,9 @@ class Hyperopt:
                     self.current_best_epoch["tune_best_result"].config
                 )
             )
-            self.current_best_epoch["params_not_optimized"] = deepcopy(not_optimized)
+            self.current_best_epoch["params_not_optimized"] = deepcopy(
+                not_optimized
+            )
 
             HyperoptTools.try_export_params(
                 self.config,
@@ -1089,7 +1165,9 @@ class Hyperopt:
 
             json_results = df_results.to_json(orient="records")
             json_results = json.loads(json_results)[0]
-            logger.info(f"Best results json:\n {json.dumps(json_results, indent=4)}")
+            logger.info(
+                f"Best results json:\n {json.dumps(json_results, indent=4)}"
+            )
 
         else:
             logger.info(f"No epochs evaluated yet, no best result.")
@@ -1169,8 +1247,8 @@ def objective(
         Hyperopt.assign_params(backtesting, params_dict, "protection")
 
     if HyperoptTools.has_space(config_ft, "roi"):
-        backtesting.strategy.minimal_roi = custom_hyperopt_ft.generate_roi_table(
-            params_dict
+        backtesting.strategy.minimal_roi = (
+            custom_hyperopt_ft.generate_roi_table(params_dict)
         )
 
     if HyperoptTools.has_space(config_ft, "stoploss"):
@@ -1179,7 +1257,9 @@ def objective(
     if HyperoptTools.has_space(config_ft, "trailing"):
         d = custom_hyperopt_ft.generate_trailing_params(params_dict)
         backtesting.strategy.trailing_stop = d["trailing_stop"]
-        backtesting.strategy.trailing_stop_positive = d["trailing_stop_positive"]
+        backtesting.strategy.trailing_stop_positive = d[
+            "trailing_stop_positive"
+        ]
         backtesting.strategy.trailing_stop_positive_offset = d[
             "trailing_stop_positive_offset"
         ]
@@ -1189,10 +1269,13 @@ def objective(
 
     if HyperoptTools.has_space(config_ft, "trades"):
         if config_ft["stake_amount"] == "unlimited" and (
-            params_dict["max_open_trades"] == -1 or params_dict["max_open_trades"] == 0
+            params_dict["max_open_trades"] == -1
+            or params_dict["max_open_trades"] == 0
         ):
             # Ignore unlimited max open trades if stake amount is unlimited
-            params_dict.update({"max_open_trades": config_ft["max_open_trades"]})
+            params_dict.update(
+                {"max_open_trades": config_ft["max_open_trades"]}
+            )
 
         updated_max_open_trades = (
             int(params_dict["max_open_trades"])
@@ -1337,11 +1420,17 @@ class myLoggerCallback(LoggerCallback):
                 slice_from_index = i
                 slice_to_index = slice_from_index + n_averaged_elements
                 if self.plot_metric in ["Profit", "Winrate"]:
-                    list_out.append(np.max(list_in[slice_from_index:slice_to_index]))
+                    list_out.append(
+                        np.max(list_in[slice_from_index:slice_to_index])
+                    )
                 elif self.plot_metric == "loss":
-                    list_out.append(np.min(list_in[slice_from_index:slice_to_index]))
+                    list_out.append(
+                        np.min(list_in[slice_from_index:slice_to_index])
+                    )
                 else:
-                    list_out.append(np.mean(list_in[slice_from_index:slice_to_index]))
+                    list_out.append(
+                        np.mean(list_in[slice_from_index:slice_to_index])
+                    )
             list_out = list_out[-max_len:]
             return list_out
         else:
@@ -1376,7 +1465,9 @@ class myLoggerCallback(LoggerCallback):
         if plot_list is not None:
             for result in self.plot_trial_results:
                 if self.plot_metric == "Profit":
-                    profit = result  # [plot_metric_list.index(self.plot_metric)]
+                    profit = (
+                        result  # [plot_metric_list.index(self.plot_metric)]
+                    )
                     try:
                         profit = (
                             profit.split("(")[1]
@@ -1409,25 +1500,45 @@ class myLoggerCallback(LoggerCallback):
                 logger.error(repr(e))
                 pass
 
-        progress = int(self.count_trials * self.live.console.width / self.total_epochs)
+        progress = int(
+            self.count_trials * self.live.console.width / self.total_epochs
+        )
         table_progress = Table(
-            show_header=False, expand=True, pad_edge=False, show_lines=False, box=None
+            show_header=False,
+            expand=True,
+            pad_edge=False,
+            show_lines=False,
+            box=None,
         )
         table_progress.add_row(
             Text("Progress"),
-            Bar(self.live.console.width, 0, progress, color="red", bgcolor="black"),
+            Bar(
+                self.live.console.width,
+                0,
+                progress,
+                color="red",
+                bgcolor="black",
+            ),
         )
         self.table_master.add_row(table_progress)
 
         table_memory = Table(
-            show_header=False, expand=True, pad_edge=False, show_lines=False, box=None
+            show_header=False,
+            expand=True,
+            pad_edge=False,
+            show_lines=False,
+            box=None,
         )
         table_memory.add_row(
             Text("Memory  "),
             Bar(
                 self.live.console.width,
                 0,
-                int(self.live.console.width * psutil.virtual_memory().percent / 100.0),
+                int(
+                    self.live.console.width
+                    * psutil.virtual_memory().percent
+                    / 100.0
+                ),
                 color="green",
                 bgcolor="black",
             ),
@@ -1435,7 +1546,11 @@ class myLoggerCallback(LoggerCallback):
         self.table_master.add_row(table_memory)
 
         table_cpu = Table(
-            show_header=False, expand=True, pad_edge=False, show_lines=False, box=None
+            show_header=False,
+            expand=True,
+            pad_edge=False,
+            show_lines=False,
+            box=None,
         )
         table_cpu.add_row(
             Text("CPU     "),
@@ -1546,7 +1661,9 @@ class ExperimentPlateauStopper(Stopper):
         patience: int = 0,
     ):
         if mode not in ("min", "max"):
-            raise ValueError("The mode parameter can only be either min or max.")
+            raise ValueError(
+                "The mode parameter can only be either min or max."
+            )
         if not isinstance(top, int) or top <= 1:
             raise ValueError(
                 "Top results to consider must be"
@@ -1599,7 +1716,9 @@ class ExperimentPlateauStopper(Stopper):
                 else:
                     self._iterations_noinc += 1
 
-            std_value = abs(np.std(self._top_values) / np.mean(self._top_values))
+            std_value = abs(
+                np.std(self._top_values) / np.mean(self._top_values)
+            )
 
             # If the current iteration has to stop
             has_plateaued = self.has_plateaued()
@@ -1636,7 +1755,8 @@ class ExperimentPlateauStopper(Stopper):
     def has_plateaued(self):
         return (
             len(self._top_values) == self._top
-            and abs(np.std(self._top_values) / np.mean(self._top_values)) <= self._std
+            and abs(np.std(self._top_values) / np.mean(self._top_values))
+            <= self._std
         )
 
     def no_increase(self):

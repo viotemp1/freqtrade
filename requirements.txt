@@ -72,3 +72,5 @@ filelock
 ray[default]
 ray[tune]
 optuna
+setproctitle
+colorama

@@ -952,7 +952,7 @@ class Hyperopt:
                 ignore_reinit_error=True,
                 include_dashboard=self.ray_dashboard,
                 dashboard_port=self.ray_dashboard_port,  # None
-                object_store_memory=0.1
+                object_store_memory=0.05
                 * psutil.virtual_memory().total,  # 10**9
                 runtime_env={
                     "worker_process_setup_hook": self.ray_worker_logging_setup_func,

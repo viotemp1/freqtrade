@@ -939,7 +939,7 @@ class Hyperopt:
                         [
                             {
                                 "CPU": cpus // config_jobs,
-                                "memory": 0.2 * psutil.virtual_memory().total,
+                                "memory": self.ray_max_memory // config_jobs,
                             }
                         ]
                     ),

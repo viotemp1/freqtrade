@@ -68,6 +68,7 @@ from rich.console import Console
 from rich.bar import Bar
 from rich.text import Text
 import asciichartpy as acp
+import setproctitle
 
 # Suppress scikit-learn FutureWarnings from skopt
 with warnings.catch_warnings():
@@ -115,10 +116,12 @@ def ray_setup_func():
     os.environ["RAY_DEDUP_LOGS"] = "0"
     # os.environ["RAY_ENABLE_RECORD_ACTOR_TASK_LOGGING"] = "1"
     # os.environ["TUNE_DISABLE_AUTO_CALLBACK_LOGGERS"] = "1"
-    os.environ["TUNE_MAX_PENDING_TRIALS_PG"] = f"{max(4,cpu_count()//2)}"
+    os.environ["TUNE_MAX_PENDING_TRIALS_PG"] = f"{max(4,cpu_count()//4)}" # f"{max(4,cpu_count()//2)}" 2
     # os.environ["FUNCTION_SIZE_WARN_THRESHOLD"] = f"{2 * 10**7}"
     # os.environ["RAY_memory_monitor_refresh_ms"] = "0" # disable memory check
     # os.environ["RAY_memory_usage_threshold"] = "1"
+
+    os.environ["SPT_NOENV"] = "1"
 
     return logger
 
@@ -126,8 +129,8 @@ def ray_setup_func():
 logger = ray_setup_func()
 
 
-def trial_str_creator(trial):
-    return ""
+# def trial_str_creator(trial):
+# return ""
 
 
 class Hyperopt:
@@ -187,11 +190,18 @@ class Hyperopt:
         self.data_pickle_file = (
             self.config["user_data_dir"]
             / "hyperopt_results"
-            / "hyperopt_tickerdata.pkl"
+            / "hyperopt_tickerdata.json"
         )
+        self.detail_data_pickle_file = (
+            self.config["user_data_dir"]
+            / "hyperopt_results"
+            / "hyperopt_detail_tickerdata.json"
+        )
+
         self.hyperopt_results_file: Path = (
             Path(self.config["user_data_dir"]).parent / "csv" / "hyperopt_results.csv"
         )
+        self.ray_log_dir = os.path.join("/tmp", "ray", self.strategy_name)
 
         self.total_epochs = config.get("epochs", 0)
         self.current_best_loss = 100
@@ -217,9 +227,19 @@ class Hyperopt:
             self.config["use_exit_signal"] = True
 
         self.print_all = self.config.get("print_all", False)
-        self.print_hyperopt_results = self.config.get("print_hyperopt_results", True)
-        self.print_json = self.config.get("print_json", False)
-        self.plot_metric = self.config.get("plot_metric", "Profit")
+        # self.print_hyperopt_results = self.config.get("print_hyperopt_results", True)
+        self.plot_chart = os.environ.get("RAY_PLOT_CHART", None)
+        if self.plot_chart and self.plot_chart.lower() == "false":
+            self.plot_chart = False
+        else:
+            self.plot_chart = self.config.get("plot_chart", True)
+        self.print_json = self.config.get("print_json", True)
+        if hasattr(self.backtesting.strategy, "plot_metric"):
+            self.plot_metric = getattr(self.backtesting.strategy, "plot_metric")
+        else:
+            self.plot_metric = self.config.get(
+                "plot_metric", "Profit"
+            )  # Profit Winrate
         self.save_results_to_csv = self.config.get("save_results_to_csv", True)
         self.ray_early_stop_enable = self.config.get("ray_early_stop_enable", True)
         self.ray_early_stop_perc = self.config.get(
@@ -228,6 +248,18 @@ class Hyperopt:
         self.ray_early_stop_std = self.config.get("ray_early_stop_std", 0.005)  # 0.001
         self.ray_early_stop_top = self.config.get("ray_early_stop_top", 10)
         self.ray_early_stop_patience = self.config.get("ray_early_stop_patience", 0.25)
+        self.ray_dashboard = self.config.get("ray_dashboard", False)
+        self.ray_dashboard_port = self.config.get("ray_dashboard_port", 8265)
+        ray_max_memory_perc = max(float(config.get("ray_max_memory", 0.8)), float(os.environ.get("RAY_MAX_MEMORY_PERC", 0.8)))
+        if ray_max_memory_perc is not None:
+            try:
+                self.ray_max_memory = psutil.virtual_memory().total * float(
+                    ray_max_memory_perc
+                )
+            except:
+                self.ray_max_memory = None
+        else:
+            self.ray_max_memory = None
 
         # self.hyperopt_table_header = 0
         # self.print_colorized = self.config.get("print_colorized", False)
@@ -238,11 +270,19 @@ class Hyperopt:
     def get_lock_filename(config: Config) -> str:
         return str(config["user_data_dir"] / "hyperopt.lock")
 
+    @staticmethod
+    def trial_str_creator(strategy_name, trial):
+        return "{}_{}_{}".format(strategy_name, trial.trainable_name, trial.trial_id)
+
     def clean_hyperopt(self) -> None:
         """
         Remove hyperopt pickle files to restart hyperopt.
         """
-        for f in [self.data_pickle_file, self.results_file]:
+        for f in [
+            self.data_pickle_file,
+            self.results_file,
+            self.detail_data_pickle_file,
+        ]:
             p = Path(f)
             if p.is_file():
                 logger.info(f"Removing `{p}`.")
@@ -753,8 +793,14 @@ class Hyperopt:
             )
             # Store non-trimmed data - will be trimmed after signal generation.
             dump(preprocessed, self.data_pickle_file)
+            if self.backtesting.timeframe_detail:
+                dump(self.backtesting.detail_data, self.detail_data_pickle_file)
+                self.backtesting.detail_data = {}
         else:
             dump(data, self.data_pickle_file)
+            if self.backtesting.timeframe_detail:
+                dump(self.backtesting.detail_data, self.detail_data_pickle_file)
+                self.backtesting.detail_data = {}
 
     def ray_worker_logging_setup_func(self):
         logger = logging.getLogger("ray")
@@ -816,6 +862,7 @@ class Hyperopt:
                 ),
                 dimensions_ft=self.dimensions,
                 data_pickle_file_ft=self.data_pickle_file,
+                detail_data_pickle_file_ft=self.detail_data_pickle_file,
                 min_date_ft=self.min_date,
                 max_date_ft=self.max_date,
                 total_epochs_ft=self.total_epochs,
@@ -824,12 +871,22 @@ class Hyperopt:
                 # _save_result_ft=self._save_result,
                 results_file_ft=self.results_file,
             )
-            trainable_with_resources = tune.with_resources(
-                trainable_with_parameters, {"cpu": cpus // config_jobs}
-            )
+            if self.ray_max_memory is None:
+                trainable_with_resources = tune.with_resources(
+                    trainable_with_parameters, {"cpu": cpus // config_jobs}
+                )
+            else:
+                trainable_with_resources = tune.with_resources(
+                    trainable_with_parameters,
+                    {
+                        "cpu": cpus // config_jobs,
+                        "memory": self.ray_max_memory // config_jobs,
+                    },
+                )
             ray.init(
                 ignore_reinit_error=True,
-                dashboard_port=8265,  # None
+                include_dashboard=self.ray_dashboard,
+                dashboard_port=self.ray_dashboard_port,  # None
                 runtime_env={
                     "worker_process_setup_hook": self.ray_worker_logging_setup_func,
                     "env_vars": {
@@ -839,17 +896,18 @@ class Hyperopt:
                     },
                     "worker_process_setup_hook": ray_setup_func,
                 },
-                # _system_config={
-                #     "num_workers_soft_limit": config_jobs,
-                # },
+                _system_config={
+                    "prestart_worker_first_driver": True,
+                    "enable_worker_prestart": True,
+                    "num_workers_soft_limit": max(config_jobs // 2, 2),
+                },
                 configure_logging=True,
                 logging_level="info",
                 log_to_driver=True,
-                _temp_dir=os.path.join("/tmp", "ray", self.strategy_name),
+                _temp_dir=self.ray_log_dir,
             )
-            # >>>>>>> b54fc2d8c (hyperopt ray)
 
-            if self.print_hyperopt_results or self.print_all or self.plot_chart:
+            if self.print_all or self.plot_chart:  # self.print_hyperopt_results or
                 r_callbacks = [
                     myLoggerCallback(
                         strategy=self.strategy_name,
@@ -883,14 +941,16 @@ class Hyperopt:
                     max_concurrent_trials=config_jobs,
                     reuse_actors=ray_reuse_actors,
                     num_samples=self.total_epochs,
-                    trial_name_creator=trial_str_creator,
+                    # trial_name_creator=lambda trial: f"{self.strategy_name}_{trial.trainable_name}_{trial.trial_id}",
                 ),
                 param_space=self.dimensions,
                 run_config=RunConfig(
+                    # name=self.strategy_name,
                     verbose=0,
-                    storage_path=os.path.join("/tmp", "ray", self.strategy_name),
+                    storage_path=self.ray_log_dir,
                     stop=stop_cb,
                     callbacks=r_callbacks,
+                    log_to_file=False,
                 ),
             )
 
@@ -978,9 +1038,11 @@ class Hyperopt:
                 "Win_Draw_Loss_Win_perc",
                 "Avg_profit",
                 "Profit",
+                "profit_perc",
                 "Winrate",
                 "Avg_duration",
                 "Objective",
+                "loss",
                 "Max_Drawdown_Acct",
                 # "trial_id",
                 # "done",
@@ -1025,6 +1087,10 @@ class Hyperopt:
                 self.current_best_epoch, self.total_epochs, self.print_json
             )
 
+            json_results = df_results.to_json(orient="records")
+            json_results = json.loads(json_results)[0]
+            logger.info(f"Best results json:\n {json.dumps(json_results, indent=4)}")
+
         else:
             logger.info(f"No epochs evaluated yet, no best result.")
 
@@ -1046,6 +1112,7 @@ def objective(
     custom_trade_info: Dict,
     dimensions_ft: Dict,
     data_pickle_file_ft: str,
+    detail_data_pickle_file_ft: str,
     min_date_ft: str,
     max_date_ft: str,
     total_epochs_ft: int,
@@ -1061,6 +1128,15 @@ def objective(
     """
 
     logger = ray_setup_func()
+    obj_id = ray.get_runtime_context().get_task_id()[:10]
+    # logger.error(f"""worker_id: {ray.get_runtime_context().get_worker_id()} /
+    #     actor_id: {ray.get_runtime_context().get_actor_id()} /
+    #     job_id: {ray.get_runtime_context().get_job_id()} /
+    #     task_id: {ray.get_runtime_context().get_task_id()}
+    #     """)
+    # logger.error(f"{setproctitle.getproctitle()} - {setproctitle.getthreadtitle()}")
+    strategy_name = backtesting.strategy.get_strategy_name()
+    setproctitle.setproctitle(f"ray::{strategy_name}::{obj_id}")
     os.chdir(Path(config_ft["user_data_dir"]).parent.absolute())
 
     mem_used = psutil.virtual_memory().percent
@@ -1139,6 +1215,10 @@ def objective(
         #     # Data is not yet analyzed, rerun populate_indicators.
         #     processed = self.advise_and_trim(processed)
 
+    if backtesting.timeframe_detail:
+        with detail_data_pickle_file_ft.open("rb") as f:
+            backtesting.detail_data = load(f, mmap_mode="r")
+
     bt_results = backtesting.backtest(
         processed=processed, start_date=min_date_ft, end_date=max_date_ft
     )
@@ -1175,6 +1255,10 @@ def objective(
     ray_result = {}
     for key, val in ray_result_tmp.items():
         ray_result[key] = val[0]
+
+    backtesting = None
+
+    gc.collect()
 
     # print(ray_result)
     # _save_result_ft(result, results_file_ft)

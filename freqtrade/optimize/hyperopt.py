@@ -67,6 +67,7 @@ from rich.table import Table
 from rich.console import Console
 from rich.bar import Bar
 from rich.text import Text
+from rich.style import Style
 import asciichartpy as acp
 import setproctitle
 
@@ -1404,10 +1405,12 @@ class myLoggerCallback(LoggerCallback):
         for col in self.table_columns:
             self.table.add_column(col)
         self.table_master = self.generate_empty_table()
+        self.refresh_chart = 100
 
     def generate_empty_table(self) -> Table:
         return Table(
             title=f"{self.strategy} {self.plot_metric} - Epoch: {self.count_trials}/{self.total_epochs} - Best: {self.best_epoch}",
+            title_style=Style(color="white", bgcolor="black", bold=True),
             show_header=False,
             padding=(0, 0),
             expand=True,
@@ -1517,7 +1520,7 @@ class myLoggerCallback(LoggerCallback):
                 self.live.console.width,
                 0,
                 progress,
-                color="red",
+                color="yellow",
                 bgcolor="black",
             ),
         )
@@ -1540,7 +1543,7 @@ class myLoggerCallback(LoggerCallback):
                     * psutil.virtual_memory().percent
                     / 100.0
                 ),
-                color="green",
+                color="green" if psutil.virtual_memory().percent < 90 else "red",
                 bgcolor="black",
             ),
         )
@@ -1565,7 +1568,24 @@ class myLoggerCallback(LoggerCallback):
         )
         self.table_master.add_row(table_cpu)
 
-    def on_step_begin(self, iteration, trials, **info):
+    def on_step_begin(self, iteration, trials, **info):  ## too often
+        # if self.live is None:
+        #     self.live = Live(
+        #         self.table_master,
+        #         vertical_overflow="ellipsis",
+        #         auto_refresh=False,
+        #     )  # , screen=True : crop', 'ellipsis', 'visible', , refresh_per_second=0.2, transient=True,
+        #     self.live.start(refresh=True)
+
+        start_date = time.time()
+        if iteration % self.refresh_chart == 0 and self.live:
+            # self.logger.warning(f"myLoggerCallback - on_step_begin - iteration: {iteration}")
+            self.generate_table()
+            self.live.update(self.table_master, refresh=True)
+        if time.time() - start_date > 0.1:
+            self.refresh_chart = int(2 * self.refresh_chart)
+
+    def on_trial_start(self, iteration, trials, trial, **info):
         if self.live is None:
             self.live = Live(
                 self.table_master,
@@ -1573,7 +1593,8 @@ class myLoggerCallback(LoggerCallback):
                 auto_refresh=False,
             )  # , screen=True : crop', 'ellipsis', 'visible', , refresh_per_second=0.2, transient=True,
             self.live.start(refresh=True)
-            self.live.update(self.table_master, refresh=True)
+        self.generate_table()
+        self.live.update(self.table_master, refresh=True)
 
     def append_trial_results(self, trial_id, result):
         loss = result["loss"]
@@ -1595,10 +1616,6 @@ class myLoggerCallback(LoggerCallback):
                 f"{(result['time_total_s']):,.2f}",
             )
         )
-
-    # def on_trial_start(self, iteration, trials, trial, **info):
-    #     self.generate_table()
-    #     self.live.update(self.table_master, refresh=True)
 
     def on_trial_result(self, iteration, trials, trial, result, **info):
         self.count_trials += 1  # len(trials)

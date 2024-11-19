@@ -88,7 +88,7 @@ MAX_LOSS = 100000  # just a big enough number to be bad result in loss optimizat
 ray_results_table_max_rows = -1  # -1 - half screen
 ray_reuse_actors = False
 
-max_used_memory = 90  # 0 or negative to deactivate, otherwise pause worker
+max_used_memory = 80  # 0 or negative to deactivate, otherwise pause worker
 
 plot_metric_list = [
     "trial_id",

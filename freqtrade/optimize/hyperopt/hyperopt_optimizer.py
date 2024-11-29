@@ -966,7 +966,7 @@ class Hyperopt:
         logger.info(f"Using optimizer random state: {self.random_state}")
         # self.hyperopt_table_header = -1
 
-        config_jobs = self.config.get("hyperopt_jobs", -1)
+        config_jobs = self.config.get("hyperopt_jobs", cpu_count())
         # Searcher
         search_algo, scheduler = self.get_search_algo_scheduler(
             None, config_jobs
@@ -1302,6 +1302,12 @@ def objective(
     """
 
     logger = ray_setup_func()
+    logger.info(f"ray hyperopt objective - ray_available_resources: {ray.available_resources()}")
+    mem_available_perc = 100.0 * ray.available_resources().get("memory", 0) / psutil.virtual_memory().total
+    logger.info(
+        f"ray hyperopt objective - ray available memory: {(mem_available_perc):,.2f}%"
+    )
+    
     obj_id = ray.get_runtime_context().get_task_id()[:10]
     # logger.error(f"""worker_id: {ray.get_runtime_context().get_worker_id()} /
     #     actor_id: {ray.get_runtime_context().get_actor_id()} /

@@ -267,8 +267,8 @@ class Hyperopt:
         self.ray_dashboard = self.config.get("ray_dashboard", False)
         self.ray_dashboard_port = self.config.get("ray_dashboard_port", 8265)
         self.ray_max_memory_perc = min(
-            float(config.get("ray_max_memory", 0.8)),
-            float(os.environ.get("RAY_MAX_MEMORY_PERC", 0.8)),
+            float(config.get("ray_max_memory_perc", 0.9)),
+            float(os.environ.get("RAY_MAX_MEMORY_PERC", 0.9)),
         )
         if self.ray_max_memory_perc is not None:
             try:

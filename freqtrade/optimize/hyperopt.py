@@ -280,7 +280,7 @@ class Hyperopt:
         else:
             self.ray_max_memory = None
 
-        logger.info(f"ray_max_memory: {(self.ray_max_memory):,.2f}. ray_max_memory_perc: {(self.ray_max_memory_perc):,.2f}")
+        logger.info(f"ray_max_memory: {(self.ray_max_memory):,.2f} / ray_max_memory_perc: {(100.*self.ray_max_memory_perc):,.2f}")
 
         self.config_jobs = self.config.get("hyperopt_jobs", cpu_count())
 

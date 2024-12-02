@@ -647,10 +647,10 @@ class Hyperopt:
                 raise OperationalException(
                     f"Ray searcher {searcher} not supported. Please use one of {searchers_list}"
                 )
-        self.searcher = searcher
-        self.searcher_param1 = searcher_param1
         if searcher == "optuna" and searcher_param1 is None:
             searcher_param1 = "NSGAIIISampler"
+        self.searcher = searcher
+        self.searcher_param1 = searcher_param1
         logger.info(f"Using searcher {searcher} - {searcher_param1}")
         try:
             if searcher == "nevergrad":

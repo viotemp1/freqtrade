@@ -649,6 +649,8 @@ class Hyperopt:
                 )
         self.searcher = searcher
         self.searcher_param1 = searcher_param1
+        if searcher == "optuna" and searcher_param1 is None:
+            searcher_param1 = "NSGAIIISampler"
         logger.info(f"Using searcher {searcher} - {searcher_param1}")
         try:
             if searcher == "nevergrad":

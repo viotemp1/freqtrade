@@ -47,7 +47,7 @@ class IHyperOpt(ABC):
         Can be any of 'hyperopt', 'ax', 'bayesopt', 'bohb', 'nevergrad', 'optuna', 'zoopt', 'hebo', 'variant_generator', 'random' or an instance of a class
         inheriting from RegressorMixin (from sklearn).
         """
-        return optuna
+        return "optuna"
 
     def generate_roi_table(self, params: Dict) -> Dict[int, float]:
         """

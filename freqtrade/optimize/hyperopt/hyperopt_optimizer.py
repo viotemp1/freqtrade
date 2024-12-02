@@ -1038,7 +1038,7 @@ class Hyperopt:
                     tune.PlacementGroupFactory(
                         [
                             {
-                                "CPU": cpus // config_jobs,
+                                "CPU": cpus // self.config_jobs,
                                 "memory": self.ray_max_memory // self.config_jobs,
                             }
                         ]

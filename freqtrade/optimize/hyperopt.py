@@ -17,6 +17,7 @@ import math
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 import psutil
+import time
 from time import sleep
 
 import rapidjson
@@ -90,7 +91,7 @@ with warnings.catch_warnings():
 ray_results_table_max_rows = -1  # -1 - half screen
 ray_reuse_actors = False
 
-max_used_memory = 80  # 0 or negative to deactivate, otherwise pause worker
+# max_used_memory = 80  # 0 or negative to deactivate, otherwise pause worker
 
 MAX_LOSS = (
     100000  # just a big enough number to be bad result in loss optimization
@@ -265,7 +266,7 @@ class Hyperopt:
         )
         self.ray_dashboard = self.config.get("ray_dashboard", False)
         self.ray_dashboard_port = self.config.get("ray_dashboard_port", 8265)
-        ray_max_memory_perc = max(
+        ray_max_memory_perc = min(
             float(config.get("ray_max_memory", 0.8)),
             float(os.environ.get("RAY_MAX_MEMORY_PERC", 0.8)),
         )
@@ -278,6 +279,8 @@ class Hyperopt:
                 self.ray_max_memory = None
         else:
             self.ray_max_memory = None
+
+        logger.info(f"ray_max_memory: {(self.ray_max_memory):,.2f}")
 
         # self.hyperopt_table_header = 0
         # self.print_colorized = self.config.get("print_colorized", False)
@@ -1225,14 +1228,14 @@ def objective(
     setproctitle.setproctitle(f"ray::{strategy_name}::{obj_id}")
     os.chdir(Path(config_ft["user_data_dir"]).parent.absolute())
 
-    mem_used = psutil.virtual_memory().percent
-    if max_used_memory > 0 and mem_used > max_used_memory:
-        logger.warning(f"objective paused - high memory usage {mem_used}")
-        while psutil.virtual_memory().percent > max_used_memory:
-            sleep(60)
-        logger.warning(
-            f"objective resumed - memory usage {psutil.virtual_memory().percent}"
-        )
+    # mem_used = psutil.virtual_memory().percent
+    # if max_used_memory > 0 and mem_used > max_used_memory:
+    #     logger.warning(f"objective paused - high memory usage {mem_used}")
+    #     while psutil.virtual_memory().percent > max_used_memory:
+    #         sleep(60)
+    #     logger.warning(
+    #         f"objective resumed - memory usage {psutil.virtual_memory().percent}"
+    #     )
 
     # print(f"objective start - {os.getcwd()}")
     logger.info(f"objective start - {os.getcwd()}")

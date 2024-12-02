@@ -266,21 +266,23 @@ class Hyperopt:
         )
         self.ray_dashboard = self.config.get("ray_dashboard", False)
         self.ray_dashboard_port = self.config.get("ray_dashboard_port", 8265)
-        ray_max_memory_perc = min(
+        self.ray_max_memory_perc = min(
             float(config.get("ray_max_memory", 0.8)),
             float(os.environ.get("RAY_MAX_MEMORY_PERC", 0.8)),
         )
-        if ray_max_memory_perc is not None:
+        if self.ray_max_memory_perc is not None:
             try:
                 self.ray_max_memory = psutil.virtual_memory().total * float(
-                    ray_max_memory_perc
+                    self.ray_max_memory_perc
                 )
             except:
                 self.ray_max_memory = None
         else:
             self.ray_max_memory = None
 
-        logger.info(f"ray_max_memory: {(self.ray_max_memory):,.2f}")
+        logger.info(f"ray_max_memory: {(self.ray_max_memory):,.2f}. ray_max_memory_perc: {(self.ray_max_memory_perc):,.2f}")
+
+        self.config_jobs = self.config.get("hyperopt_jobs", cpu_count())
 
         # self.hyperopt_table_header = 0
         # self.print_colorized = self.config.get("print_colorized", False)
@@ -875,10 +877,9 @@ class Hyperopt:
         logger.info(f"Using optimizer random state: {self.random_state}")
         # self.hyperopt_table_header = -1
 
-        config_jobs = self.config.get("hyperopt_jobs", cpu_count())
         # Searcher
         search_algo, scheduler = self.get_search_algo_scheduler(
-            None, config_jobs
+            None, self.config_jobs
         )
         # Initialize spaces ...
         self.init_spaces()
@@ -897,7 +898,7 @@ class Hyperopt:
 
         cpus = cpu_count()
         logger.info(f"Found {cpus} CPU cores. Let's make them scream!")
-        logger.info(f"Number of parallel jobs set as: {config_jobs}")
+        logger.info(f"Number of parallel jobs set as: {self.config_jobs}")
 
         not_optimized = self.backtesting.strategy.get_no_optimize_params()
         not_optimized = deep_merge_dicts(
@@ -931,10 +932,11 @@ class Hyperopt:
                 _get_results_dict_ft=self._get_results_dict,
                 # _save_result_ft=self._save_result,
                 results_file_ft=self.results_file,
+                max_memory_per_worker=self.ray_max_memory // self.config_jobs
             )
             if self.ray_max_memory is None:
                 trainable_with_resources = tune.with_resources(
-                    trainable_with_parameters, {"CPU": cpus // config_jobs}
+                    trainable_with_parameters, {"CPU": cpus // self.config_jobs}
                 )
             else:
                 trainable_with_resources = tune.with_resources(
@@ -943,13 +945,13 @@ class Hyperopt:
                         [
                             {
                                 "CPU": cpus // config_jobs,
-                                "memory": self.ray_max_memory // config_jobs,
+                                "memory": self.ray_max_memory // self.config_jobs,
                             }
                         ]
                     ),
                     # {
-                    #     "cpu": cpus // config_jobs,
-                    #     "memory": self.ray_max_memory // config_jobs,
+                    #     "cpu": cpus // self.config_jobs,
+                    #     "memory": self.ray_max_memory // self.config_jobs,
                     # },
                 )
             ray.init(
@@ -970,7 +972,7 @@ class Hyperopt:
                 _system_config={
                     "prestart_worker_first_driver": True,
                     "enable_worker_prestart": True,
-                    "num_workers_soft_limit": max(config_jobs // 2, 2),
+                    "num_workers_soft_limit": max(self.config_jobs // 2, 2),
                 },
                 configure_logging=True,
                 logging_level="info",
@@ -1014,7 +1016,7 @@ class Hyperopt:
                     mode="min",
                     search_alg=search_algo,
                     scheduler=scheduler,
-                    max_concurrent_trials=config_jobs,
+                    max_concurrent_trials=self.config_jobs,
                     reuse_actors=ray_reuse_actors,
                     num_samples=self.total_epochs,
                     # trial_name_creator=lambda trial: f"{self.strategy_name}_{trial.trainable_name}_{trial.trial_id}",
@@ -1204,6 +1206,7 @@ def objective(
     _get_results_dict_ft: Any,
     # _save_result_ft: Any,
     results_file_ft: Path,
+    max_memory_per_worker: float
 ) -> Dict[str, Any]:
     """
     Used Optimize function.
@@ -1212,11 +1215,12 @@ def objective(
     """
 
     logger = ray_setup_func()
-    logger.info(f"ray hyperopt objective - ray_available_resources: {ray.available_resources()}")
-    mem_available_perc = 100.0 * ray.available_resources().get("memory", 0) / psutil.virtual_memory().total
-    logger.info(
-        f"ray hyperopt objective - ray available memory: {(mem_available_perc):,.2f}%"
-    )
+    # logger.info(f"ray hyperopt objective - ray_available_resources: {ray.available_resources()}")
+    mem_available = ray.available_resources().get("memory", 0) # / psutil.virtual_memory().total
+    if mem_available > max_memory_per_worker:
+        logger.warning(
+            f"ray hyperopt objective - low ray available memory: {(mem_available):,.2f}/{(max_memory_per_worker):,.2f}"
+        )
     
     obj_id = ray.get_runtime_context().get_task_id()[:10]
     # logger.error(f"""worker_id: {ray.get_runtime_context().get_worker_id()} /
@@ -1239,7 +1243,7 @@ def objective(
     #     )
 
     # print(f"objective start - {os.getcwd()}")
-    logger.info(f"objective start - {os.getcwd()}")
+    logger.debug(f"objective start - {os.getcwd()}")
     if custom_trade_info is not None:
         backtesting.strategy.custom_trade_info = custom_trade_info
 

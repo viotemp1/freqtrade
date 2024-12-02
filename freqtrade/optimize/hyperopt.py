@@ -1217,9 +1217,9 @@ def objective(
     logger = ray_setup_func()
     # logger.info(f"ray hyperopt objective - ray_available_resources: {ray.available_resources()}")
     mem_available = ray.available_resources().get("memory", 0) # / psutil.virtual_memory().total
-    if mem_available > max_memory_per_worker:
+    if max_memory_per_worker > mem_available:
         logger.warning(
-            f"ray hyperopt objective - low ray available memory: {(mem_available):,.2f}/{(max_memory_per_worker):,.2f}"
+            f"ray hyperopt objective - low ray available memory: {(max_memory_per_worker):,.2f}/{(mem_available):,.2f}"
         )
     
     obj_id = ray.get_runtime_context().get_task_id()[:10]

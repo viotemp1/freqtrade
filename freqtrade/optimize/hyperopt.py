@@ -940,14 +940,15 @@ class Hyperopt:
                 trainable_with_resources = tune.with_resources(
                     trainable_with_parameters, {"CPU": cpus // self.config_jobs}
                 )
+                logger.info(f"ray resources per worker: CPU: {cpus // self.config_jobs}/{cpus}")
             else:
                 trainable_with_resources = tune.with_resources(
                     trainable_with_parameters,
                     tune.PlacementGroupFactory(
                         [
                             {
-                                "CPU": cpus // self.config_jobs,
-                                "memory": self.ray_max_memory // self.config_jobs,
+                                "CPU": 0.95 * cpus // self.config_jobs,
+                                "memory": 0.95 * self.ray_max_memory / self.config_jobs,
                             }
                         ]
                     ),
@@ -956,12 +957,14 @@ class Hyperopt:
                     #     "memory": self.ray_max_memory // self.config_jobs,
                     # },
                 )
+                logger.info(f"ray resources per worker: CPU: {cpus // self.config_jobs}/{cpus} - MEM: {(self.ray_max_memory / self.config_jobs):,.2f}/{(self.ray_max_memory):,.2f}")
             ray.init(
                 ignore_reinit_error=True,
                 include_dashboard=self.ray_dashboard,
                 dashboard_port=self.ray_dashboard_port,  # None
-                object_store_memory=0.05
-                * psutil.virtual_memory().total,  # 10**9
+                _memory=self.ray_max_memory,
+                object_store_memory=min(5*10**9, 0.05 * psutil.virtual_memory().total),  # 10**9
+                _redis_max_memory =min(10**9, 0.01 * psutil.virtual_memory().total),
                 runtime_env={
                     "worker_process_setup_hook": self.ray_worker_logging_setup_func,
                     "env_vars": {
@@ -979,8 +982,17 @@ class Hyperopt:
                 configure_logging=True,
                 logging_level="info",
                 log_to_driver=True,
-                logging_config=ray.LoggingConfig(encoding="TEXT", log_level="INFO"),
+                # logging_config=ray.LoggingConfig(encoding="TEXT", log_level="INFO"),
                 _temp_dir=self.ray_log_dir,
+            )
+            mem_available_perc = (
+                100.0
+                * ray.available_resources().get("memory", 0)
+                / psutil.virtual_memory().total
+            )
+            # logging.getLogger(__name__).setLevel(logging.INFO)
+            logger.info(
+                f"ray available memory perc: {(mem_available_perc):,.2f}"
             )
 
             if (

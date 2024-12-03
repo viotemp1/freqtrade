@@ -280,7 +280,7 @@ class Hyperopt:
         else:
             self.ray_max_memory = None
 
-        logger.info(f"ray_max_memory: {(self.ray_max_memory):,.2f} / ray_max_memory_perc: {(100.*self.ray_max_memory_perc):,.2f}")
+        logger.debug(f"ray_max_memory: {(self.ray_max_memory):,.2f} / ray_max_memory_perc: {(100.*self.ray_max_memory_perc):,.2f}")
 
         self.config_jobs = self.config.get("hyperopt_jobs", cpu_count())
 
@@ -940,7 +940,7 @@ class Hyperopt:
                 trainable_with_resources = tune.with_resources(
                     trainable_with_parameters, {"CPU": cpus // self.config_jobs}
                 )
-                logger.info(f"ray resources per worker: CPU: {cpus // self.config_jobs}/{cpus}")
+                logger.debug(f"ray resources per worker: CPU: {cpus // self.config_jobs}/{cpus}")
             else:
                 trainable_with_resources = tune.with_resources(
                     trainable_with_parameters,
@@ -957,7 +957,7 @@ class Hyperopt:
                     #     "memory": self.ray_max_memory // self.config_jobs,
                     # },
                 )
-                logger.info(f"ray resources per worker: CPU: {cpus // self.config_jobs}/{cpus} - MEM: {(self.ray_max_memory / self.config_jobs):,.2f}/{(self.ray_max_memory):,.2f}")
+                logger.debug(f"ray resources per worker: CPU: {cpus // self.config_jobs}/{cpus} - MEM: {(self.ray_max_memory / self.config_jobs):,.2f}/{(self.ray_max_memory):,.2f}")
             ray.init(
                 ignore_reinit_error=True,
                 include_dashboard=self.ray_dashboard,
@@ -985,14 +985,15 @@ class Hyperopt:
                 # logging_config=ray.LoggingConfig(encoding="TEXT", log_level="INFO"),
                 _temp_dir=self.ray_log_dir,
             )
+            mem_available_bytes = ray.available_resources().get("memory", 0)
             mem_available_perc = (
                 100.0
-                * ray.available_resources().get("memory", 0)
+                * mem_available_bytes
                 / psutil.virtual_memory().total
             )
             # logging.getLogger(__name__).setLevel(logging.INFO)
             logger.info(
-                f"ray available memory perc: {(mem_available_perc):,.2f}"
+                f"ray available memory (before tune): {(mem_available_perc):,.2f}% - {(mem_available_bytes/10**9):,.2f}GB/{(psutil.virtual_memory().total/10**9):,.2f}GB"
             )
 
             if (

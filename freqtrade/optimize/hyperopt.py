@@ -982,7 +982,7 @@ class Hyperopt:
                 configure_logging=True,
                 logging_level="info",
                 log_to_driver=True,
-                # logging_config=ray.LoggingConfig(encoding="TEXT", log_level="INFO"),
+                logging_config=ray.LoggingConfig(encoding="TEXT", log_level="INFO"),
                 _temp_dir=self.ray_log_dir,
             )
             mem_available_bytes = ray.available_resources().get("memory", 0)

@@ -72,6 +72,7 @@ from rich.text import Text
 from rich.style import Style
 import asciichartpy as acp
 import setproctitle
+from progressbar import ProgressBar
 
 # Suppress scikit-learn FutureWarnings from skopt
 with warnings.catch_warnings():
@@ -939,7 +940,7 @@ class Hyperopt:
                 f"ray available memory (before tune): {(mem_available_perc):,.2f}% - {(mem_available_bytes/10**9):,.2f}GB/{(psutil.virtual_memory().total/10**9):,.2f}GB"
             )
 
-            if self.print_all or self.plot_chart:  # self.print_hyperopt_results or
+            if (self.print_all or self.plot_chart) and sys.stdout.isatty():  # self.print_hyperopt_results or
                 r_callbacks = [
                     myLoggerCallback(
                         strategy=self.strategy_name,
@@ -950,7 +951,12 @@ class Hyperopt:
                     )
                 ]
             else:
-                r_callbacks = None
+                r_callbacks = [
+                    myPBarCallback(
+                        strategy=self.strategy_name,
+                        total_epochs=self.total_epochs,
+                    )
+                ]
 
             if self.ray_early_stop_enable:
                 stop_cb = ExperimentPlateauStopper(
@@ -1585,6 +1591,39 @@ class myLoggerCallback(LoggerCallback):
             self.live.stop()
 
 
+class myPBarCallback(LoggerCallback):
+    def __init__(
+        self,
+        strategy="",
+        total_epochs=-1,
+    ) -> None:
+
+        self.total_epochs = total_epochs
+        self.strategy = strategy
+        self.count_trials = 0
+        if total_epochs <= 0:
+            logger.warning(
+                f"Please set total_epochs > 0 for myLoggerCallback - {total_epochs}"
+            )
+            self.pbar = ProgressBar().start()
+        else:
+            self.pbar = ProgressBar(maxval=total_epochs).start()
+
+
+    # def on_trial_start(self, iteration, trials, trial, **info):
+
+    def on_trial_result(self, iteration, trials, trial, result, **info):
+        self.count_trials += 1  # len(trials)
+        # print(
+        #     f"Results for trial {trial} / iteration {iteration} / count trials = {self.count_trials}"
+        # )
+        # print(f"result: {result}")
+
+        self.pbar.update(self.count_trials)
+
+    def on_experiment_end(self, trials, **info):
+        self.pbar.finish()
+        
 class ExperimentPlateauStopper(Stopper):
     """Early stop the experiment when a metric plateaued across trials.
 

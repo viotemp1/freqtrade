@@ -27,9 +27,8 @@ tables==3.9.1; python_version < "3.10"
 tables==3.10.1; python_version >= "3.10"
 joblib==1.4.2
 rich==13.8.0
+progressbar
 pyarrow==17.0.0; platform_machine != 'armv7l'
-#rich==13.7.1
-#pyarrow==16.1.0; platform_machine != 'armv7l'
 asciichartpy
 
 # find first, C search in arrays
@@ -72,5 +71,6 @@ filelock
 ray[default]
 ray[tune]
 optuna
+optunahub
 setproctitle
 colorama

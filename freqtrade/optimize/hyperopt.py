@@ -1601,24 +1601,21 @@ class myPBarCallback(LoggerCallback):
         self.total_epochs = total_epochs
         self.strategy = strategy
         self.count_trials = 0
+        self.pbar = None
         if total_epochs <= 0:
             logger.warning(
                 f"Please set total_epochs > 0 for myLoggerCallback - {total_epochs}"
             )
-            self.pbar = ProgressBar().start()
-        else:
-            self.pbar = ProgressBar(maxval=total_epochs).start()
 
-
-    # def on_trial_start(self, iteration, trials, trial, **info):
+    def on_trial_start(self, iteration, trials, trial, **info):
+        if self.pbar is None:
+            if total_epochs <= 0:
+                self.pbar = ProgressBar().start()
+            else:
+                self.pbar = ProgressBar(maxval=self.total_epochs).start()            
 
     def on_trial_result(self, iteration, trials, trial, result, **info):
-        self.count_trials += 1  # len(trials)
-        # print(
-        #     f"Results for trial {trial} / iteration {iteration} / count trials = {self.count_trials}"
-        # )
-        # print(f"result: {result}")
-
+        self.count_trials += 1
         self.pbar.update(self.count_trials)
 
     def on_experiment_end(self, trials, **info):

@@ -1609,7 +1609,7 @@ class myPBarCallback(LoggerCallback):
 
     def on_trial_start(self, iteration, trials, trial, **info):
         if self.pbar is None:
-            if total_epochs <= 0:
+            if self.total_epochs <= 0:
                 self.pbar = ProgressBar().start()
             else:
                 self.pbar = ProgressBar(maxval=self.total_epochs).start()            

@@ -53,6 +53,7 @@ class XGBoostRFRegressor(BaseRegressionModel):
             eval_set=eval_set,
             sample_weight_eval_set=eval_weights,
             xgb_model=xgb_model,
+            verbose=False
         )
         # set the callbacks to empty so that we can serialize to disk later
         model.set_params(callbacks=[])

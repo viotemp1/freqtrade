@@ -75,3 +75,4 @@ optuna
 optunahub
 setproctitle
 colorama
+cmaes

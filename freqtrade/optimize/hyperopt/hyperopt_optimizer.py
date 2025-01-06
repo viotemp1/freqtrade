@@ -1075,7 +1075,7 @@ class Hyperopt:
                         plot_metric=self.plot_metric,
                     )
                 ]
-            else:
+            elif sys.stdout.isatty():
                 r_callbacks = [
                     myPBarCallback(
                         strategy=self.strategy_name,

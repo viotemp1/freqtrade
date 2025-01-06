@@ -1082,6 +1082,8 @@ class Hyperopt:
                         total_epochs=self.total_epochs,
                     )
                 ]
+            else:
+                r_callbacks = []
 
             if self.ray_early_stop_enable:
                 stop_cb = ExperimentPlateauStopper(

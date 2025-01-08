@@ -93,11 +93,6 @@ ray_reuse_actors = False
 
 # max_used_memory = 80  # 0 or negative to deactivate, otherwise pause worker
 
-<<<<<<< HEAD:freqtrade/optimize/hyperopt/hyperopt_optimizer.py
-=======
-MAX_LOSS = 100000  # just a big enough number to be bad result in loss optimization
-
->>>>>>> 635b35c84 (my):freqtrade/optimize/hyperopt.py
 plot_metric_list = [
     "trial_id",
     "Trades",
@@ -233,8 +228,17 @@ class Hyperopt:
         self.plot_chart = os.environ.get("RAY_PLOT_CHART", None)
         if self.plot_chart and self.plot_chart.lower() == "false":
             self.plot_chart = False
+        elif self.plot_chart and self.plot_chart.lower() == "true":
+            self.plot_chart = True
         else:
             self.plot_chart = self.config.get("plot_chart", True)
+        self.print_progressbar = os.environ.get("RAY_PROGRESSBAR", None)
+        if self.print_progressbar and self.print_progressbar.lower() == "false":
+            self.print_progressbar = False
+        elif self.print_progressbar and self.print_progressbar.lower() == "true":
+            self.print_progressbar = True
+        else:
+            self.print_progressbar = self.config.get("print_progressbar", False)
         self.print_json = self.config.get("print_json", True)
         if hasattr(self.backtesting.strategy, "plot_metric"):
             self.plot_metric = getattr(self.backtesting.strategy, "plot_metric")
@@ -629,13 +633,6 @@ class Hyperopt:
                 raise OperationalException(
                     f"Ray searcher {searcher} not supported. Please use one of {searchers_list}"
                 )
-<<<<<<< HEAD:freqtrade/optimize/hyperopt/hyperopt_optimizer.py
-        if searcher == "optuna" and searcher_param1 is None:
-            searcher_param1 = "NSGAIIISampler"
-        self.searcher = searcher
-        self.searcher_param1 = searcher_param1
-=======
->>>>>>> acf735ebb (my):freqtrade/optimize/hyperopt.py
         if searcher == "optuna" and searcher_param1 is None:
             searcher_param1 = "NSGAIIISampler"
         self.searcher = searcher
@@ -732,7 +729,6 @@ class Hyperopt:
                         from optuna.exceptions import (
                             ExperimentalWarning as o_ExperimentalWarning,
                         )
-<<<<<<< HEAD:freqtrade/optimize/hyperopt/hyperopt_optimizer.py
 
                     # TPESampler NSGAIIISampler CmaEsSampler GPSampler NSGAIISampler QMCSampler
                     if self.searcher_param1:
@@ -826,6 +822,9 @@ class Hyperopt:
                         logger.warning(
                             f"searcher_param1 {self.searcher_param1} not set "
 =======
+=======
+
+>>>>>>> 042046745 (my):freqtrade/optimize/hyperopt.py
                         warnings.filterwarnings(
                             "ignore", category=o_ExperimentalWarning
                         )
@@ -1065,7 +1064,9 @@ class Hyperopt:
                 f"ray available memory (before tune): {(mem_available_perc):,.2f}% - {(mem_available_bytes/10**9):,.2f}GB/{(psutil.virtual_memory().total/10**9):,.2f}GB"
             )
 
-            if (self.print_all or self.plot_chart) and sys.stdout.isatty():  # self.print_hyperopt_results or
+            if (
+                self.print_all or self.plot_chart
+            ) and sys.stdout.isatty():  # self.print_hyperopt_results or
                 r_callbacks = [
                     myLoggerCallback(
                         strategy=self.strategy_name,
@@ -1075,7 +1076,7 @@ class Hyperopt:
                         plot_metric=self.plot_metric,
                     )
                 ]
-            elif sys.stdout.isatty():
+            elif self.print_progressbar or sys.stdout.isatty():
                 r_callbacks = [
                     myPBarCallback(
                         strategy=self.strategy_name,
@@ -1739,7 +1740,7 @@ class myPBarCallback(LoggerCallback):
             if self.total_epochs <= 0:
                 self.pbar = ProgressBar().start()
             else:
-                self.pbar = ProgressBar(maxval=self.total_epochs).start()            
+                self.pbar = ProgressBar(maxval=self.total_epochs).start()
 
     def on_trial_result(self, iteration, trials, trial, result, **info):
         self.count_trials += 1
@@ -1747,7 +1748,8 @@ class myPBarCallback(LoggerCallback):
 
     def on_experiment_end(self, trials, **info):
         self.pbar.finish()
-        
+
+
 class ExperimentPlateauStopper(Stopper):
     """Early stop the experiment when a metric plateaued across trials.
 

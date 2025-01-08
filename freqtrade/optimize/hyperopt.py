@@ -237,8 +237,17 @@ class Hyperopt:
         self.plot_chart = os.environ.get("RAY_PLOT_CHART", None)
         if self.plot_chart and self.plot_chart.lower() == "false":
             self.plot_chart = False
+        elif self.plot_chart and self.plot_chart.lower() == "true":
+            self.plot_chart = True
         else:
             self.plot_chart = self.config.get("plot_chart", True)
+        self.print_progressbar = os.environ.get("RAY_PROGRESSBAR", None)
+        if self.print_progressbar and self.print_progressbar.lower() == "false":
+            self.print_progressbar = False
+        elif self.print_progressbar and self.print_progressbar.lower() == "true":
+            self.print_progressbar = True
+        else:
+            self.print_progressbar = self.config.get("print_progressbar", False)
         self.print_json = self.config.get("print_json", True)
         if hasattr(self.backtesting.strategy, "plot_metric"):
             self.plot_metric = getattr(self.backtesting.strategy, "plot_metric")
@@ -704,6 +713,7 @@ class Hyperopt:
                         from optuna.exceptions import (
                             ExperimentalWarning as o_ExperimentalWarning,
                         )
+
                         warnings.filterwarnings(
                             "ignore", category=o_ExperimentalWarning
                         )
@@ -940,7 +950,9 @@ class Hyperopt:
                 f"ray available memory (before tune): {(mem_available_perc):,.2f}% - {(mem_available_bytes/10**9):,.2f}GB/{(psutil.virtual_memory().total/10**9):,.2f}GB"
             )
 
-            if (self.print_all or self.plot_chart) and sys.stdout.isatty():  # self.print_hyperopt_results or
+            if (
+                self.print_all or self.plot_chart
+            ) and sys.stdout.isatty():  # self.print_hyperopt_results or
                 r_callbacks = [
                     myLoggerCallback(
                         strategy=self.strategy_name,
@@ -950,7 +962,7 @@ class Hyperopt:
                         plot_metric=self.plot_metric,
                     )
                 ]
-            elif sys.stdout.isatty():
+            elif self.print_progressbar or sys.stdout.isatty():
                 r_callbacks = [
                     myPBarCallback(
                         strategy=self.strategy_name,
@@ -1614,7 +1626,7 @@ class myPBarCallback(LoggerCallback):
             if self.total_epochs <= 0:
                 self.pbar = ProgressBar().start()
             else:
-                self.pbar = ProgressBar(maxval=self.total_epochs).start()            
+                self.pbar = ProgressBar(maxval=self.total_epochs).start()
 
     def on_trial_result(self, iteration, trials, trial, result, **info):
         self.count_trials += 1
@@ -1622,7 +1634,8 @@ class myPBarCallback(LoggerCallback):
 
     def on_experiment_end(self, trials, **info):
         self.pbar.finish()
-        
+
+
 class ExperimentPlateauStopper(Stopper):
     """Early stop the experiment when a metric plateaued across trials.
 

@@ -73,6 +73,8 @@ ray[default]
 ray[tune]
 optuna
 optunahub
+jax
+numpyro
 setproctitle
 colorama
 cmaes

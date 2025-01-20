@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import psutil
 import time
 from time import sleep
+import socket
 
 import rapidjson
 
@@ -263,7 +264,7 @@ class Hyperopt:
         self.ray_early_stop_std = self.config.get("ray_early_stop_std", 0.005)  # 0.001
         self.ray_early_stop_top = self.config.get("ray_early_stop_top", 10)
         self.ray_early_stop_patience = self.config.get("ray_early_stop_patience", 0.25)
-        self.ray_dashboard = self.config.get("ray_dashboard", False)
+        self.ray_dashboard = self.config.get("ray_dashboard", True)
         self.ray_dashboard_port = self.config.get("ray_dashboard_port", 8265)
         self.ray_max_memory_perc = min(
             float(config.get("ray_max_memory_perc", 0.9)),
@@ -915,7 +916,8 @@ class Hyperopt:
             ray.init(
                 ignore_reinit_error=True,
                 include_dashboard=self.ray_dashboard,
-                dashboard_port=self.ray_dashboard_port,  # None
+                dashboard_port=find_first_free_port(self.ray_dashboard_port),  # None
+                _node_ip_address="127.0.0.1",  # 127.0.0.1 0.0.0.0 socket.gethostbyname(socket.gethostname())
                 _memory=self.ray_max_memory,
                 object_store_memory=min(
                     5 * 10**9, 0.05 * psutil.virtual_memory().total
@@ -1182,13 +1184,21 @@ def objective(
 
     logger = ray_setup_func()
     # logger.info(f"ray hyperopt objective - ray_available_resources: {ray.available_resources()}")
-    mem_available = ray.available_resources().get(
-        "memory", 0
-    )  # / psutil.virtual_memory().total
-    # if max_memory_per_worker > mem_available:
-    #     logger.warning(
-    #         f"ray hyperopt objective - low ray available memory: {(max_memory_per_worker):,.2f}/{(mem_available):,.2f}"
-    #     )
+    mem_available = ray.available_resources().get("memory", 0)
+
+    # ray_current_workers = ray.util.state.list_workers(
+    #     address=ray.get_runtime_context().gcs_address,
+    #     filters=[("is_alive", "=", "True")],
+    #     raise_on_missing_output=False,
+    # )
+    # logger.info(f"ray workers: {len(ray_current_workers)} - {ray_current_workers}")
+    
+    # ray_current_tasks = ray.util.state.list_tasks(
+    #     address=ray.get_runtime_context().gcs_address,
+    #     filters=[("state", "!=", "FINISHED")],
+    #     raise_on_missing_output=False,
+    # )
+    # logger.info(f"ray tasks: {len(ray_current_tasks)} - {ray_current_tasks}")
 
     obj_id = ray.get_runtime_context().get_task_id()[:10]
     # logger.error(f"""worker_id: {ray.get_runtime_context().get_worker_id()} /
@@ -1196,7 +1206,7 @@ def objective(
     #     job_id: {ray.get_runtime_context().get_job_id()} /
     #     task_id: {ray.get_runtime_context().get_task_id()}
     #     """)
-    # logger.error(f"{setproctitle.getproctitle()} - {setproctitle.getthreadtitle()}")
+
     strategy_name = backtesting.strategy.get_strategy_name()
     setproctitle.setproctitle(f"ray::{strategy_name}::{obj_id}")
     os.chdir(Path(config_ft["user_data_dir"]).parent.absolute())
@@ -1774,3 +1784,21 @@ class ExperimentPlateauStopper(Stopper):
         return (
             self.has_plateaued() and self._iterations_plateau >= self._patience
         ) or (self.no_increase() and self._iterations_noinc >= self._patience)
+
+
+def port_in_use(port):
+    all_connections = psutil.net_connections()
+    for conn in all_connections:
+        if conn.laddr.port == port:
+            return True
+    return False
+
+
+# print(port_in_use(8265))
+
+
+def find_first_free_port(port):
+    for i in range(100):
+        if not port_in_use(port + i):
+            return port + i
+    return None

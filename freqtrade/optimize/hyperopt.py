@@ -1368,7 +1368,7 @@ class myLoggerCallback(LoggerCallback):
         self.plot_metric = plot_metric
         if total_epochs <= 0:
             logger.warning(
-                f"Please set total_epochs > 0 for myLoggerCallback - {total_epochs}"
+                f"Please set total_epochs for myLoggerCallback - {total_epochs}"
             )
         self.total_epochs = total_epochs
         self.strategy = strategy

@@ -1492,7 +1492,7 @@ class myLoggerCallback(LoggerCallback):
         self.live = None
         self.table = Table(expand=True)
         self.table_columns = [
-            "Epoch",
+            "Trial",
             "Trades",
             "Win  Draw  Loss  Win%",
             "Avg profit",
@@ -1500,8 +1500,9 @@ class myLoggerCallback(LoggerCallback):
             "Winrate",
             "Avg duration",
             "Objective",
-            "Max Drawdown (Acct)",
-            "Time to run",
+            "Max Drawdown",
+            "Epoch",
+            "TTR",
         ]
         for col in self.table_columns:
             self.table.add_column(col)
@@ -1700,6 +1701,7 @@ class myLoggerCallback(LoggerCallback):
                 f"{result['Avg_duration']}",
                 loss,
                 f"{result['Max_Drawdown_Acct']}",
+                f"{result['Epoch']}",
                 f"{(result['time_total_s']):,.2f}",
             )
         )

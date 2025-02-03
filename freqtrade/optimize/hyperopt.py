@@ -249,6 +249,7 @@ class Hyperopt:
             self.print_progressbar = True
         else:
             self.print_progressbar = self.config.get("print_progressbar", False)
+        logger.info(f"plot_chart: {self.plot_chart} / print_progressbar: {self.print_progressbar} / isatty: {sys.stdout.isatty()}")
         self.print_json = self.config.get("print_json", True)
         if hasattr(self.backtesting.strategy, "plot_metric"):
             self.plot_metric = getattr(self.backtesting.strategy, "plot_metric")
@@ -954,7 +955,7 @@ class Hyperopt:
 
             if (
                 self.print_all or self.plot_chart
-            ) and sys.stdout.isatty():  # self.print_hyperopt_results or
+            ):  # self.print_hyperopt_results or  and sys.stdout.isatty()
                 r_callbacks = [
                     myLoggerCallback(
                         strategy=self.strategy_name,
@@ -972,7 +973,7 @@ class Hyperopt:
                     )
                 ]
             else:
-                r_callbacks = []
+                r_callbacks = None # []
 
             if self.ray_early_stop_enable:
                 stop_cb = ExperimentPlateauStopper(
@@ -1008,12 +1009,20 @@ class Hyperopt:
                 ),
             )
 
-            results = tuner.fit()
+            try:
+                results = tuner.fit()
+            except Exception as e:
+                logger.info(f"Tuner fit failed {e}")
+                if ray.is_initialized():
+                    ray.shutdown()
+                pass
+                # os.kill(os.getpid(), signal.SIGTERM)
 
         except KeyboardInterrupt:
-            print("User interrupted..")
+            logger.info("User interrupted..")
             if ray.is_initialized():
                 ray.shutdown()
+            pass
 
         # ['Trades', 'Win_Draw_Loss_Win_perc', 'Avg_profit', 'Profit',
         #        'Avg_duration', 'Objective', 'is_profit', 'Max_Drawdown_Acct', 'loss',
@@ -1033,7 +1042,7 @@ class Hyperopt:
 
         self.total_epochs = results.num_terminated
         logger.info(
-            f"fHyperopt finished - OK: {results.num_terminated} / Failed: {results.num_errors}"
+            f"Hyperopt finished - OK: {results.num_terminated} / Failed: {results.num_errors}"
         )
 
         if self.current_best_epoch is None:
@@ -1146,7 +1155,7 @@ class Hyperopt:
             logger.info(f"Best results json:\n {json.dumps(json_results, indent=4)}")
 
         else:
-            logger.info(f"No epochs evaluated yet, no best result.")
+            logger.info(f"Hyperopt finished - No epochs evaluated yet, no best result.")
 
         # print(self.current_best_epoch.metrics)
         # {'Trades': '4681', 'Win_Draw_Loss_Win_perc': '3517     0  1164  75.1', 'Avg_profit': '  3.12%', 'Profit': '195340381.096 USDT (19,534,038.11%)', 'Avg_duration': '0 days 21:49:00', 'Objective': '-38,157,864.48667', 'is_profit': True, 'Max_Drawdown_Acct': '  5274021.894 USDT    (5.18%)', 'loss': -38157864.486667246, 'timestamp': 1718690291, 'checkpoint_dir_name': None, 'done': True, 'training_iteration': 1, 'trial_id': '06452780', 'date': '2024-06-18_08-58-11', 'time_this_iter_s': 61.3154194355011, 'time_total_s': 61.3154194355011, 'pid': 1931179, 'hostname': 'vioUbuntu2', 'node_ip': '10.0.0.251', 'config': {'buy_fastk_rsi_patterns': 95, 'buy_max_slippage': 1.075, 'buy_prev_cbuys_count': 3, 'buy_prev_cbuys_rwindow': 5, 'buy_prev_min_close_age': 8, 'buy_prev_min_close_perc': 37.4, 'buy_prev_min_close_rwindow': 5, 'buy_proposed_stake_limit': 3731, 'buy_proposed_stake_limit_margin': 0.208, 'csl_5_step1_SL': 0.052, 'csl_5_step1_time': 591.366, 'csl_5_step2_SL': 0.035, 'csl_5_step2_time': 1625.187, 'csl_5_step3_SL': 0.075, 'csl_5_step3_time': 3717.144, 'csl_5_step4_SL': 0.248, 'sell_order_max_age': 2.8, 'sell_order_min_profit': 0.06, 'stoploss': -0.097}, 'time_since_restore': 61.3154194355011, 'iterations_since_restore': 1, 'experiment_tag': '139_buy_fastk_rsi_patterns=95,buy_max_slippage=1.0750,buy_prev_cbuys_count=3,buy_prev_cbuys_rwindow=5,buy_prev_min_close_age=8,buy_prev_min_close_perc=37.4000,buy_prev_min_close_rwindow=5,buy_proposed_stake_limit=3731,buy_proposed_stake_limit_margin=0.2080,csl_5_step1_SL=0.0520,csl_5_step1_time=591.3660,csl_5_step2_SL=0.0350,csl_5_step2_time=1625.1870,csl_5_step3_SL=0.0750,csl_5_step3_time=3717.1440,csl_5_step4_SL=0.2480,sell_order_max_age=2.8000,sell_order_min_profit=0.0600,stoploss=-0.0970'}
@@ -1571,6 +1580,7 @@ class myLoggerCallback(LoggerCallback):
         self.live.update(self.table_master, refresh=True)
 
     def append_trial_results(self, trial_id, result):
+        # logger.info(f"append_trial_results result: {result}")
         loss = result["loss"]
         if abs(loss) > 100:
             loss = f"{result['loss']:,.6e}"
@@ -1587,7 +1597,7 @@ class myLoggerCallback(LoggerCallback):
                 f"{result['Avg_duration']}",
                 loss,
                 f"{result['Max_Drawdown_Acct']}",
-                f"{result['Epoch']}",
+                f"{self.count_trials}",
                 f"{(result['time_total_s']):,.2f}",
             )
         )

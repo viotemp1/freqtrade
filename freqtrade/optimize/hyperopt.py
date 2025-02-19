@@ -687,9 +687,11 @@ class Hyperopt:
                     elif self.searcher_param1 == "AutoSampler":
                         import optunahub
 
-                        optuna__sampler = optunahub.load_module(
-                            "samplers/auto_sampler"
-                        ).AutoSampler(seed=self.random_state)
+                        with warnings.catch_warnings():
+                            warnings.simplefilter("ignore", optuna.exceptions.ExperimentalWarning)
+                            optuna__sampler = optunahub.load_module(
+                                "samplers/auto_sampler"
+                            ).AutoSampler(seed=self.random_state)
                     elif self.searcher_param1 == "CmaEsSampler":
                         optuna__sampler = optuna.samplers.CmaEsSampler(
                             seed=self.random_state
@@ -1586,6 +1588,7 @@ class myLoggerCallback(LoggerCallback):
             loss = f"{result['loss']:,.6e}"
         else:
             loss = f"{result['loss']:,.6f}"
+            
         self.trial_results.append(
             (
                 f"{trial_id}",

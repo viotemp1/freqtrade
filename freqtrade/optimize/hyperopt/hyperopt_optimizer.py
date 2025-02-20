@@ -111,6 +111,7 @@ plot_metric_list = [
 def ray_setup_func():
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.INFO)
+    logging.getLogger('optuna._experimental').setLevel(logging.ERROR)
 
     os.environ["RAY_TQDM"] = "1"
     os.environ["RAY_PROFILING"] = "0"
@@ -686,7 +687,6 @@ class Hyperopt:
                     random_state=self.random_state,
                 )
             elif searcher == "optuna":
-<<<<<<< HEAD:freqtrade/optimize/hyperopt/hyperopt_optimizer.py
                 from optuna.exceptions import ExperimentalWarning
 
                 with warnings.catch_warnings():
@@ -695,11 +695,6 @@ class Hyperopt:
                     )
                     import optuna
 
-=======
-                import optuna
-                from optuna.exceptions import ExperimentalWarning as o_ExperimentalWarning
-                
->>>>>>> 77d06ba40 (my):freqtrade/optimize/hyperopt.py
                 # TPESampler NSGAIIISampler CmaEsSampler GPSampler NSGAIISampler QMCSampler
                 if self.searcher_param1:
                     if self.searcher_param1 == "NSGAIIISampler":
@@ -708,7 +703,7 @@ class Hyperopt:
                         )
                     elif self.searcher_param1 == "AutoSampler":
                         with warnings.catch_warnings():
-                            warnings.filterwarnings("ignore", category=o_ExperimentalWarning)
+                            warnings.simplefilter("ignore", optuna.exceptions.ExperimentalWarning)
                             import optunahub
                             optuna__sampler = optunahub.load_module(
                                 "samplers/auto_sampler"
@@ -840,6 +835,13 @@ class Hyperopt:
                         optuna__sampler = optuna.integration.BoTorchSampler(
                             seed=self.random_state
                         )
+=======
+                        with warnings.catch_warnings():
+                            warnings.simplefilter("ignore", optuna.exceptions.ExperimentalWarning)
+                            optuna__sampler = optuna.integration.BoTorchSampler(
+                                seed=self.random_state
+                            )
+>>>>>>> d5875f1f1 (my):freqtrade/optimize/hyperopt.py
                     else:  # default
                         optuna__sampler = optuna.samplers.TPESampler(
                             seed=self.random_state
@@ -941,8 +943,7 @@ class Hyperopt:
                 self.backtesting.detail_data = {}
 
     def ray_worker_logging_setup_func(self):
-        logger = logging.getLogger("ray")
-        logger.setLevel(logging.INFO)
+        logging.getLogger("ray").setLevel(logging.INFO)
         warnings.simplefilter("always")
         np.random.seed(self.random_state)
         random.seed(self.random_state)

@@ -686,6 +686,7 @@ class Hyperopt:
                     random_state=self.random_state,
                 )
             elif searcher == "optuna":
+<<<<<<< HEAD:freqtrade/optimize/hyperopt/hyperopt_optimizer.py
                 from optuna.exceptions import ExperimentalWarning
 
                 with warnings.catch_warnings():
@@ -694,6 +695,11 @@ class Hyperopt:
                     )
                     import optuna
 
+=======
+                import optuna
+                from optuna.exceptions import ExperimentalWarning as o_ExperimentalWarning
+                
+>>>>>>> 77d06ba40 (my):freqtrade/optimize/hyperopt.py
                 # TPESampler NSGAIIISampler CmaEsSampler GPSampler NSGAIISampler QMCSampler
                 if self.searcher_param1:
                     if self.searcher_param1 == "NSGAIIISampler":
@@ -701,10 +707,9 @@ class Hyperopt:
                             seed=self.random_state
                         )
                     elif self.searcher_param1 == "AutoSampler":
-                        import optunahub
-
                         with warnings.catch_warnings():
-                            warnings.simplefilter("ignore", optuna.exceptions.ExperimentalWarning)
+                            warnings.filterwarnings("ignore", category=o_ExperimentalWarning)
+                            import optunahub
                             optuna__sampler = optunahub.load_module(
                                 "samplers/auto_sampler"
                             ).AutoSampler(seed=self.random_state)

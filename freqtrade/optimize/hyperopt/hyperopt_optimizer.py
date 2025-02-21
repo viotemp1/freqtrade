@@ -847,10 +847,12 @@ class Hyperopt:
                             seed=self.random_state
 >>>>>>> 635b35c84 (my):freqtrade/optimize/hyperopt.py
                         )
-                    searcher_algo = tune.create_searcher(
-                        searcher,
-                        sampler=optuna__sampler,
-                    )
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore", optuna.exceptions.ExperimentalWarning)
+                        searcher_algo = tune.create_searcher(
+                            searcher,
+                            sampler=optuna__sampler,
+                        )
             elif (
                 searcher == "hebo"
             ):  # gp gpy gpy_mlp psgld svidkl deep_ensemble rf catboost svgp mcbn masked_deep_ensemble fe_deep_ensemble gumbel

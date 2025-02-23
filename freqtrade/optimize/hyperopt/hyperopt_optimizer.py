@@ -76,7 +76,7 @@ from optuna.exceptions import ExperimentalWarning
 
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=FutureWarning)
-    warnings.filterwarnings("ignore", ExperimentalWarning)
+    warnings.filterwarnings("ignore", category=ExperimentalWarning)
     from skopt import Optimizer
     from skopt.space import Dimension
     import ray
@@ -115,7 +115,7 @@ def ray_setup_func():
     from optuna.exceptions import ExperimentalWarning
 
     with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", ExperimentalWarning)
+        warnings.filterwarnings("ignore", category=ExperimentalWarning)
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.INFO)
 
@@ -698,7 +698,7 @@ class Hyperopt:
                 from optuna.exceptions import ExperimentalWarning
 
                 with warnings.catch_warnings():
-                    warnings.filterwarnings("ignore", ExperimentalWarning)
+                    warnings.filterwarnings("ignore", category=ExperimentalWarning)
                     import optuna
 
                     # TPESampler NSGAIIISampler CmaEsSampler GPSampler NSGAIISampler QMCSampler

@@ -72,8 +72,11 @@ import setproctitle
 from progressbar import ProgressBar
 
 # Suppress scikit-learn FutureWarnings from skopt
+from optuna.exceptions import ExperimentalWarning
+
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=FutureWarning)
+    warnings.filterwarnings("ignore", ExperimentalWarning)
     from skopt import Optimizer
     from skopt.space import Dimension
     import ray
@@ -109,9 +112,12 @@ plot_metric_list = [
 
 
 def ray_setup_func():
+    from optuna.exceptions import ExperimentalWarning
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", ExperimentalWarning)
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.INFO)
-    logging.getLogger('optuna._experimental').setLevel(logging.ERROR)
 
     os.environ["RAY_TQDM"] = "1"
     os.environ["RAY_PROFILING"] = "0"
@@ -241,7 +247,9 @@ class Hyperopt:
             self.print_progressbar = True
         else:
             self.print_progressbar = self.config.get("print_progressbar", False)
-        logger.info(f"plot_chart: {self.plot_chart} / print_progressbar: {self.print_progressbar} / isatty: {sys.stdout.isatty()}")
+        logger.info(
+            f"plot_chart: {self.plot_chart} / print_progressbar: {self.print_progressbar} / isatty: {sys.stdout.isatty()}"
+        )
         self.print_json = self.config.get("print_json", True)
         if hasattr(self.backtesting.strategy, "plot_metric"):
             self.plot_metric = getattr(self.backtesting.strategy, "plot_metric")
@@ -690,24 +698,23 @@ class Hyperopt:
                 from optuna.exceptions import ExperimentalWarning
 
                 with warnings.catch_warnings():
-                    warnings.filterwarnings(
-                        action="ignore", category=ExperimentalWarning
-                    )
+                    warnings.filterwarnings("ignore", ExperimentalWarning)
                     import optuna
 
-                # TPESampler NSGAIIISampler CmaEsSampler GPSampler NSGAIISampler QMCSampler
-                if self.searcher_param1:
-                    if self.searcher_param1 == "NSGAIIISampler":
-                        optuna__sampler = optuna.samplers.NSGAIIISampler(
-                            seed=self.random_state
-                        )
-                    elif self.searcher_param1 == "AutoSampler":
-                        with warnings.catch_warnings():
-                            warnings.simplefilter("ignore", optuna.exceptions.ExperimentalWarning)
+                    # TPESampler NSGAIIISampler CmaEsSampler GPSampler NSGAIISampler QMCSampler
+                    if self.searcher_param1:
+                        if self.searcher_param1 == "NSGAIIISampler":
+                            optuna__sampler = optuna.samplers.NSGAIIISampler(
+                                seed=self.random_state
+                            )
+                        elif self.searcher_param1 == "AutoSampler":
+>>>>>>> bbac514fc (my):freqtrade/optimize/hyperopt.py
                             import optunahub
+
                             optuna__sampler = optunahub.load_module(
                                 "samplers/auto_sampler"
                             ).AutoSampler(seed=self.random_state)
+<<<<<<< HEAD:freqtrade/optimize/hyperopt/hyperopt_optimizer.py
                     elif self.searcher_param1 == "CmaEsSampler":
                         optuna__sampler = optuna.samplers.CmaEsSampler(
                             seed=self.random_state
@@ -789,6 +796,8 @@ class Hyperopt:
                             optuna__sampler = optunahub.load_module(
                                 "samplers/auto_sampler"
                             ).AutoSampler(seed=self.random_state)
+=======
+>>>>>>> bbac514fc (my):freqtrade/optimize/hyperopt.py
                         elif self.searcher_param1 == "CmaEsSampler":
                             optuna__sampler = optuna.samplers.CmaEsSampler(
                                 seed=self.random_state
@@ -811,6 +820,7 @@ class Hyperopt:
                                 warn_independent_sampling=False,
                             )
                         elif self.searcher_param1 == "BoTorchSampler":
+<<<<<<< HEAD:freqtrade/optimize/hyperopt/hyperopt_optimizer.py
                             optuna__sampler = optuna.integration.BoTorchSampler(
                                 seed=self.random_state
                             )
@@ -849,6 +859,15 @@ class Hyperopt:
                         )
                     with warnings.catch_warnings():
                         warnings.simplefilter("ignore", optuna.exceptions.ExperimentalWarning)
+=======
+                            optuna__sampler = optuna.integration.BoTorchSampler(
+                                seed=self.random_state
+                            )
+                        else:  # default
+                            optuna__sampler = optuna.samplers.TPESampler(
+                                seed=self.random_state
+                            )
+>>>>>>> bbac514fc (my):freqtrade/optimize/hyperopt.py
                         searcher_algo = tune.create_searcher(
                             searcher,
                             sampler=optuna__sampler,
@@ -1097,7 +1116,7 @@ class Hyperopt:
                     )
                 ]
             else:
-                r_callbacks = None # []
+                r_callbacks = None  # []
 
             if self.ray_early_stop_enable:
                 stop_cb = ExperimentPlateauStopper(
@@ -1325,7 +1344,7 @@ def objective(
     #     raise_on_missing_output=False,
     # )
     # logger.info(f"ray workers: {len(ray_current_workers)} - {ray_current_workers}")
-    
+
     # ray_current_tasks = ray.util.state.list_tasks(
     #     address=ray.get_runtime_context().gcs_address,
     #     filters=[("state", "!=", "FINISHED")],
@@ -1710,7 +1729,7 @@ class myLoggerCallback(LoggerCallback):
             loss = f"{result['loss']:,.6e}"
         else:
             loss = f"{result['loss']:,.6f}"
-            
+
         self.trial_results.append(
             (
                 f"{trial_id}",

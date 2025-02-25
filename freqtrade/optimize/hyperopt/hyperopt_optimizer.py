@@ -110,6 +110,21 @@ plot_metric_list = [
     "time_total_s",
 ]
 
+optunahub_samplers = [
+    "auto_sampler",
+    "differential_evolution",
+    "grey_wolf_optimization",
+    # "hebo",
+    "implicit_natural_gradient",
+    "moead",
+    "mocma",
+    "nelder_mead",
+    "nsgaii_with_tpe_warmup",
+    "whale_optimization",
+    "simulated_annealing",
+    # "nsgaiiisampler"
+]
+
 
 def ray_setup_func():
     from optuna.exceptions import ExperimentalWarning
@@ -698,12 +713,29 @@ class Hyperopt:
                 from optuna.exceptions import ExperimentalWarning
 
                 with warnings.catch_warnings():
-                    warnings.filterwarnings("ignore", category=ExperimentalWarning)
+                    warnings.filterwarnings(
+                        action="ignore", category=ExperimentalWarning
+                    )
                     import optuna
 
                     # TPESampler NSGAIIISampler CmaEsSampler GPSampler NSGAIISampler QMCSampler
                     if self.searcher_param1:
-                        if self.searcher_param1 == "NSGAIIISampler":
+                        if self.searcher_param1 in optunahub_samplers:
+                            import optunahub
+
+                            ohsmodule = optunahub.load_module(
+                                f"samplers/{self.searcher_param1}"
+                            )
+                            if optunahub_sampler in ["nsgaii_with_tpe_warmup"]:
+                                sampler_m = inspect.getmembers(ohsmodule)[2][1]
+                            else:
+                                sampler_m = inspect.getmembers(ohsmodule)[0][1]
+                            try:
+                                sampler = sampler_m(seed=self.random_state)
+                            except:
+                                sampler = sampler_m()
+                                pass
+                        elif self.searcher_param1 == "NSGAIIISampler":
                             optuna__sampler = optuna.samplers.NSGAIIISampler(
                                 seed=self.random_state
                             )

@@ -1837,10 +1837,13 @@ class ExperimentPlateauStopper(Stopper):
 
 
 def port_in_use(port):
-    all_connections = psutil.net_connections()
-    for conn in all_connections:
-        if conn.laddr.port == port:
-            return True
+    try:
+        all_connections = psutil.net_connections()
+        for conn in all_connections:
+            if conn.laddr.port == port:
+                return True
+    except: # for os x
+        pass
     return False
 
 

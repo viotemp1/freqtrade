@@ -938,6 +938,7 @@ class Hyperopt:
             logger.warning(
                 f"Cannot set random_state_seed {self.random_state} for {self.searcher}"
             )
+            logger.warning(f"{repr(e)}")
             searcher_algo = tune.create_searcher(searcher)
             pass
 

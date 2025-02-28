@@ -726,7 +726,7 @@ class Hyperopt:
                             ohsmodule = optunahub.load_module(
                                 f"samplers/{self.searcher_param1}"
                             )
-                            if optunahub_sampler in ["nsgaii_with_tpe_warmup"]:
+                            if self.searcher_param1 in ["nsgaii_with_tpe_warmup"]:
                                 sampler_m = inspect.getmembers(ohsmodule)[2][1]
                             else:
                                 sampler_m = inspect.getmembers(ohsmodule)[0][1]

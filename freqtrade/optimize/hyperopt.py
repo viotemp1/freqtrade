@@ -721,9 +721,12 @@ class Hyperopt:
                             else:
                                 sampler_m = inspect.getmembers(ohsmodule)[0][1]
                             try:
-                                sampler = sampler_m(seed=self.random_state)
+                                optuna__sampler = sampler_m(seed=self.random_state)
                             except:
-                                sampler = sampler_m()
+                                logger.warning(
+                                    f"Cannot set random_state_seed {self.random_state} for {self.searcher}"
+                                )
+                                optuna__sampler = sampler_m()
                                 pass
                         elif self.searcher_param1 == "NSGAIIISampler":
                             optuna__sampler = optuna.samplers.NSGAIIISampler(
@@ -797,10 +800,7 @@ class Hyperopt:
             # searcher = ConcurrencyLimiter(
             #     tune.create_searcher(searcher), max_concurrent=config_jobs
             # )
-            logger.warning(
-                f"Cannot set random_state_seed {self.random_state} for {self.searcher}"
-            )
-            logger.warning(f"{repr(e)}")
+            logger.warning(f"Set searcher error: {repr(e)}")
             searcher_algo = tune.create_searcher(searcher)
             pass
 

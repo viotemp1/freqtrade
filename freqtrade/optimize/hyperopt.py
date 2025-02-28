@@ -793,13 +793,14 @@ class Hyperopt:
                 searcher_algo = tune.create_searcher(
                     searcher, random_state_seed=self.random_state
                 )
-        except:
+        except Exception as e:
             # searcher = ConcurrencyLimiter(
             #     tune.create_searcher(searcher), max_concurrent=config_jobs
             # )
             logger.warning(
                 f"Cannot set random_state_seed {self.random_state} for {self.searcher}"
             )
+            logger.warning(f"{repr(e)}")
             searcher_algo = tune.create_searcher(searcher)
             pass
 

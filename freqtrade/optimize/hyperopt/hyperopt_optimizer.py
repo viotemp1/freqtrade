@@ -721,7 +721,7 @@ class Hyperopt:
                     # TPESampler NSGAIIISampler CmaEsSampler GPSampler NSGAIISampler QMCSampler
                     if self.searcher_param1:
                         if self.searcher_param1 in optunahub_samplers:
-                            import optunahub
+                            import optunahub, inspect
 
                             ohsmodule = optunahub.load_module(
                                 f"samplers/{self.searcher_param1}"

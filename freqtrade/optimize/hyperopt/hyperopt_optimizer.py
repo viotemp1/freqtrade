@@ -731,22 +731,23 @@ class Hyperopt:
                             else:
                                 sampler_m = inspect.getmembers(ohsmodule)[0][1]
                             try:
-                                sampler = sampler_m(seed=self.random_state)
+                                optuna__sampler = sampler_m(seed=self.random_state)
                             except:
-                                sampler = sampler_m()
+                                logger.warning(
+                                    f"Cannot set random_state_seed {self.random_state} for {self.searcher}"
+                                )
+                                optuna__sampler = sampler_m()
                                 pass
                         elif self.searcher_param1 == "NSGAIIISampler":
                             optuna__sampler = optuna.samplers.NSGAIIISampler(
                                 seed=self.random_state
                             )
                         elif self.searcher_param1 == "AutoSampler":
->>>>>>> bbac514fc (my):freqtrade/optimize/hyperopt.py
                             import optunahub
 
                             optuna__sampler = optunahub.load_module(
                                 "samplers/auto_sampler"
                             ).AutoSampler(seed=self.random_state)
-<<<<<<< HEAD:freqtrade/optimize/hyperopt/hyperopt_optimizer.py
                     elif self.searcher_param1 == "CmaEsSampler":
                         optuna__sampler = optuna.samplers.CmaEsSampler(
                             seed=self.random_state
@@ -935,10 +936,13 @@ class Hyperopt:
             #     tune.create_searcher(searcher), max_concurrent=config_jobs
             # )
             logger.warning(f"Set searcher error: {repr(e)}")
+<<<<<<< HEAD:freqtrade/optimize/hyperopt/hyperopt_optimizer.py
             logger.warning(
                 f"Cannot set random_state_seed {self.random_state} for {self.searcher}"
             )
             logger.warning(f"{repr(e)}")
+=======
+>>>>>>> 357bec974 (my):freqtrade/optimize/hyperopt.py
             searcher_algo = tune.create_searcher(searcher)
             pass
 

@@ -117,16 +117,15 @@ plot_metric_list = [
 optunahub_samplers = [
     "auto_sampler",
     "differential_evolution",
-    "grey_wolf_optimization",
-    # "hebo",
-    "implicit_natural_gradient",
-    "moead",
+    "hebo",
     "mocma",
     "nelder_mead",
     "nsgaii_with_tpe_warmup",
     "whale_optimization",
     "simulated_annealing",
-    # "nsgaiiisampler"
+    # "grey_wolf_optimization",
+    # "implicit_natural_gradient",
+    # "moead",
 ]
 
 
@@ -716,10 +715,35 @@ class Hyperopt:
                             ohsmodule = optunahub.load_module(
                                 f"samplers/{self.searcher_param1}"
                             )
-                            if self.searcher_param1 in ["nsgaii_with_tpe_warmup"]:
-                                sampler_m = inspect.getmembers(ohsmodule)[2][1]
+                            if self.searcher_param1 == "auto_sampler":
+                                sampler_m = ohsmodule.AutoSampler
+                            elif self.searcher_param1 == "differential_evolution":
+                                sampler_m = ohsmodule.DESampler
+                            elif self.searcher_param1 == "hebo":
+                                sampler_m = ohsmodule.HEBOSampler
+                            # elif self.searcher_param1 == "implicit_natural_gradient":
+                            #     sampler_m = ohsmodule.ImplicitNaturalGradientSampler
+                            # elif self.searcher_param1 == "moead":
+                            #     sampler_m = ohsmodule.MOEADSampler
+                            elif self.searcher_param1 == "mocma":
+                                sampler_m = ohsmodule.MoCmaSampler
+                            elif self.searcher_param1 == "nelder_mead":
+                                sampler_m = ohsmodule.NelderMeadSampler
+                            elif self.searcher_param1 == "nsgaii_with_tpe_warmup":
+                                sampler_m = ohsmodule.NSGAIIWithTPEWarmupSampler
+                            elif self.searcher_param1 == "whale_optimization":
+                                sampler_m = ohsmodule.WhaleOptimizationSampler
+                            elif self.searcher_param1 == "simulated_annealing":
+                                sampler_m = ohsmodule.SimulatedAnnealingSample
                             else:
-                                sampler_m = inspect.getmembers(ohsmodule)[0][1]
+                                logger.warning(
+                                    f"searcher_param1 {self.searcher_param1} not supported - {optunahub_samplers}"
+                                )
+
+                            # if self.searcher_param1 in ["nsgaii_with_tpe_warmup"]:
+                            #     sampler_m = inspect.getmembers(ohsmodule)[2][1]
+                            # else:
+                            #     sampler_m = inspect.getmembers(ohsmodule)[0][1]
                             try:
                                 optuna__sampler = sampler_m(seed=self.random_state)
                             except:
@@ -770,6 +794,10 @@ class Hyperopt:
                         searcher_algo = tune.create_searcher(
                             searcher,
                             sampler=optuna__sampler,
+                        )
+                    else:
+                        logger.warning(
+                            f"searcher_param1 {self.searcher_param1} not set "
                         )
             elif (
                 searcher == "hebo"
@@ -1843,7 +1871,7 @@ def port_in_use(port):
         for conn in all_connections:
             if conn.laddr.port == port:
                 return True
-    except: # for os x
+    except:  # for os x
         pass
     return False
 

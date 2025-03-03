@@ -430,61 +430,6 @@ class HyperOptimizer:
     #         bt_results, self.min_date, self.max_date, params_dict, processed=processed
     #     )
 
-    def _get_results_dict(
-        self,
-        backtesting_results: dict[str, Any],
-        min_date: datetime,
-        max_date: datetime,
-        params_dict: dict[str, Any],
-        processed: dict[str, DataFrame],
-    ) -> dict[str, Any]:
-        params_details = self._get_params_details(params_dict)
-
-        strat_stats = generate_strategy_stats(
-            self.pairlist,
-            self.backtesting.strategy.get_strategy_name(),
-            backtesting_results,
-            min_date,
-            max_date,
-            market_change=self.market_change,
-            is_hyperopt=True,
-        )
-        results_explanation = HyperoptTools.format_results_explanation_string(
-            strat_stats, self.config["stake_currency"]
-        )
-
-        not_optimized = self.backtesting.strategy.get_no_optimize_params()
-        not_optimized = deep_merge_dicts(not_optimized, self._get_no_optimize_details())
-
-        trade_count = strat_stats["total_trades"]
-        total_profit = strat_stats["profit_total"]
-
-        # If this evaluation contains too short amount of trades to be
-        # interesting -- consider it as 'bad' (assigned max. loss value)
-        # in order to cast this hyperspace point away from optimization
-        # path. We do not want to optimize 'hodl' strategies.
-        loss: float = MAX_LOSS
-        if trade_count >= self.config["hyperopt_min_trades"]:
-            loss = self.calculate_loss(
-                results=backtesting_results["results"],
-                trade_count=trade_count,
-                min_date=min_date,
-                max_date=max_date,
-                config=self.config,
-                processed=processed,
-                backtest_stats=strat_stats,
-                starting_balance=get_dry_run_wallet(self.config),
-            )
-        return {
-            "loss": loss,
-            "params_dict": params_dict,
-            "params_details": params_details,
-            "params_not_optimized": not_optimized,
-            "results_metrics": strat_stats,
-            "results_explanation": results_explanation,
-            "total_profit": total_profit,
-        }
-
     # def get_optimizer(
     #     self,
     #     cpu_count: int,

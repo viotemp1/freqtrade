@@ -384,7 +384,6 @@ class HyperoptTools:
         )
 
     @staticmethod
-
     def prepare_trials_columns(trials: DataFrame) -> DataFrame:
         trials["Best"] = ""
 

@@ -5,7 +5,11 @@
 scipy==1.15.2
 scikit-learn==1.6.1
 ft-scikit-optimize==0.9.2
+<<<<<<< HEAD
 filelock==3.17.0
 ray[tune]
 hyperopt
 
+filelock
+ray[tune]
+hyperopt

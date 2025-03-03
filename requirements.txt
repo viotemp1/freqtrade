@@ -22,15 +22,10 @@ tabulate==0.9.0
 pycoingecko==3.2.0
 jinja2==3.1.5
 joblib==1.4.2
-<<<<<<< HEAD
 rich==13.9.4
 pyarrow==19.0.1; platform_machine != 'armv7l'
-=======
-rich==13.8.0
 # progressbar
 progressbar @ git+https://github.com/viotemp1/python-progressbar.git
-pyarrow==17.0.0; platform_machine != 'armv7l'
->>>>>>> 635b35c84 (my)
 asciichartpy
 
 # find first, C search in arrays

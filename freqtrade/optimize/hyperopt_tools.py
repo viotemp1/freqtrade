@@ -16,6 +16,7 @@ from freqtrade.misc import deep_merge_dicts, round_dict, safe_value_fallback2
 from freqtrade.optimize.hyperopt_epoch_filters import hyperopt_filter_epochs
 from freqtrade.optimize.optimize_reports import generate_wins_draws_losses, generate_wins_draws_losses1
 from freqtrade.util import fmt_coin
+from typing import Any, Dict, List, Optional, Tuple
 
 import tabulate
 

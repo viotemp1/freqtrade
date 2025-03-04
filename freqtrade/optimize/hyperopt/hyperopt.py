@@ -1334,7 +1334,7 @@ class myLoggerCallback(LoggerCallback):
         x = range(1, len(plot_list) + 1)
         # x = range(1, width + 1)
         # plt.scatter(x, plot_list, marker = "fhd")
-        plt.plot(x, plot_list, marker = "dot") # dot fhd
+        plt.plot(x, plot_list, marker = "hd") # dot fhd hd
         plt.plotsize(width, height)
         # plt.yscale("log")    # for logarithmic y scale not working - ValueError('math domain error')
         # plt.xscale("linear") # for linear x scale

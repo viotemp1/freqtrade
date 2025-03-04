@@ -9,7 +9,7 @@ import random
 import warnings
 from datetime import datetime, timezone
 import time
-from math import ceil
+from math import ceil, nan
 from multiprocessing import Manager
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -1265,9 +1265,8 @@ class myLoggerCallback(LoggerCallback):
             table_max_rows = self.console_height // 3
 
         self.trial_results = deque(maxlen=table_max_rows)  # []
-        self.plot_trial_results = (
-            []
-        )  # deque(maxlen=min(int(0.9*self.console_width), self.console_width-14)) #
+        self.plot_trial_results = []
+        # deque(maxlen=min(int(0.9*self.console_width), self.console_width-14)) #
         self.plot_trial_results_len = min(
             int(0.9 * self.console_width), self.console_width - 14
         )
@@ -1332,9 +1331,10 @@ class myLoggerCallback(LoggerCallback):
 
     def plot_chart_fn(self, width:int, height:int, plot_list: list, title: str=""):
         plt.clf()
+        x = range(1, len(plot_list) + 1)
         # x = range(1, width + 1)
         # plt.scatter(x, plot_list, marker = "fhd")
-        plt.plot(plot_list, marker = "dot") # dot fhd
+        plt.plot(x, plot_list, marker = "dot") # dot fhd
         plt.plotsize(width, height)
         # plt.yscale("log")    # for logarithmic y scale not working - ValueError('math domain error')
         # plt.xscale("linear") # for linear x scale
@@ -1383,8 +1383,9 @@ class myLoggerCallback(LoggerCallback):
                         profit = float(profit)
                         plot_list.append(profit)
                     except:
-                        # print(profit)
+                        # print(result)
                         # profit = math.nan
+                        plot_list.append(nan)
                         pass
                 else:
                     result = float(result)
@@ -1393,21 +1394,30 @@ class myLoggerCallback(LoggerCallback):
                     )  # [plot_metric_list.index(self.plot_metric)]
 
         # print("plot_metric", self.plot_metric, "len trial_results", len(self.trial_results),  "plot_list", plot_list)
-        if plot_list and len(self.plot_trial_results) > 1:
+        if plot_list and len(plot_list) > 1:
             try:
                 ## plot_list = plot_list[-int(0.9*self.console_width):]
                 # rich_plot = acp.plot(
                 #     self.resize_list(plot_list, self.plot_trial_results_len),
                 #     {"height": self.console_height // 4, "format": "{:.4e}"},
                 # )
+                plot_list_arr = np.array(plot_list)
+                if len(plot_list_arr[np.isnan(plot_list_arr) == False]) > 1:
+                    plot_list_interp = np.interp(
+                        np.arange(len(plot_list_arr)),
+                        np.arange(len(plot_list_arr))[np.isnan(plot_list_arr) == False],
+                        plot_list_arr[np.isnan(plot_list_arr) == False],
+                    ).tolist()
+                else:
+                    plot_list_interp = plot_list
                 plot = self.plot_chart_fn(width=self.console_width_plot,  height=self.console_height // 4, 
-                                          plot_list=plot_list)
+                                          plot_list=plot_list_interp)
                 rich_plot = Group(*self.decoder.decode(plot))
                 self.table_master.add_row(rich_plot)
-                # print(plot_list)
+                # print(len(plot_list), len(self.plot_trial_results))
             except Exception as e:
-                print(f"myLoggerCallback - generate_table - {repr(e)}")
-                logger.error(f"myLoggerCallback - generate_table - {repr(e)}")
+                print(f"myLoggerCallback - generate_table Error: {repr(e)}")
+                logger.error(f"myLoggerCallback - generate_table Error: {repr(e)}")
                 pass
 
         progress = int(self.count_trials * self.live.console.width / self.total_epochs)

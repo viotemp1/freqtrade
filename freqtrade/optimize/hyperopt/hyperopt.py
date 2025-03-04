@@ -1335,10 +1335,10 @@ class myLoggerCallback(LoggerCallback):
         x = range(1, len_plot_list + 1)
         plt.plot(x, plot_list, marker = "hd") # dot fhd hd
         if len_plot_list > 10:
-            xticks = [i for i in range(0, len_plot_list+1, len_plot_list//10)]
+            xticks = [i for i in range(1, len_plot_list+1, len_plot_list//10)]
             xlabels = [f"{(i):,.0f}" for i in range(1, len_plot_list+1, len_plot_list//10)]
         else:
-            xticks = [i for i in range(0, len_plot_list+1, 1)]
+            xticks = [i for i in range(1, len_plot_list+1, 1)]
             xlabels = [f"{(i):,.0f}" for i in range(1, len_plot_list+1, 1)]
         plt.xticks(xticks, xlabels)
         plt.plotsize(width, height)

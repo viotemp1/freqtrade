@@ -1331,13 +1331,17 @@ class myLoggerCallback(LoggerCallback):
 
     def plot_chart_fn(self, width:int, height:int, plot_list: list, title: str=""):
         plt.clf()
-        x = range(1, len(plot_list) + 1)
-        # x = range(1, width + 1)
-        # plt.scatter(x, plot_list, marker = "fhd")
+        len_plot_list = len(plot_list)
+        x = range(1, len_plot_list + 1)
         plt.plot(x, plot_list, marker = "hd") # dot fhd hd
+        if len_plot_list > 10:
+            xticks = [i for i in range(0, len_plot_list+1, len_plot_list//10)]
+            xlabels = [f"{(i):,.0f}" for i in range(1, len_plot_list+1, len_plot_list//10)]
+        else:
+            xticks = [i for i in range(0, len_plot_list+1, 1)]
+            xlabels = [f"{(i):,.0f}" for i in range(1, len_plot_list+1, 1)]
+        plt.xticks(xticks, xlabels)
         plt.plotsize(width, height)
-        # plt.yscale("log")    # for logarithmic y scale not working - ValueError('math domain error')
-        # plt.xscale("linear") # for linear x scale
         if len(title) > 0:
             plt.title(title)
         plt.theme('dark')

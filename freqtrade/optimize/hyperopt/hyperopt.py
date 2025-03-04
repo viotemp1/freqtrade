@@ -45,11 +45,13 @@ import psutil
 
 from rich.live import Live
 from rich.table import Table
-from rich.console import Console
+from rich.console import Console, Group
 from rich.bar import Bar
 from rich.text import Text
 from rich.style import Style
-import asciichartpy as acp
+from rich.ansi import AnsiDecoder
+# import asciichartpy as acp
+import plotext as plt
 import setproctitle
 from progressbar import ProgressBar
 
@@ -1255,7 +1257,9 @@ class myLoggerCallback(LoggerCallback):
     ) -> None:
 
         self.console_width = Console().width
+        self.console_width_plot = self.console_width - 4
         self.console_height = Console().height
+        self.decoder = AnsiDecoder()
 
         if table_max_rows <= 0:
             table_max_rows = self.console_height // 3
@@ -1291,7 +1295,7 @@ class myLoggerCallback(LoggerCallback):
             "Avg duration",
             "Objective",
             "Max Drawdown",
-            "Epoch",
+            # "Epoch",
             "TTR",
         ]
         for col in self.table_columns:
@@ -1325,6 +1329,19 @@ class myLoggerCallback(LoggerCallback):
             return list_out
         else:
             return list_in
+
+    def plot_chart_fn(self, width:int, height:int, plot_list: list, title: str=""):
+        plt.clf()
+        # x = range(1, width + 1)
+        # plt.scatter(x, plot_list, marker = "fhd")
+        plt.plot(plot_list, marker = "dot") # dot fhd
+        plt.plotsize(width, height)
+        # plt.yscale("log")    # for logarithmic y scale not working - ValueError('math domain error')
+        # plt.xscale("linear") # for linear x scale
+        if len(title) > 0:
+            plt.title(title)
+        plt.theme('dark')
+        return plt.build()
 
     def generate_table(self) -> Table:
         """Make a new table."""
@@ -1378,14 +1395,19 @@ class myLoggerCallback(LoggerCallback):
         # print("plot_metric", self.plot_metric, "len trial_results", len(self.trial_results),  "plot_list", plot_list)
         if plot_list and len(self.plot_trial_results) > 1:
             try:
-                # plot_list = plot_list[-int(0.9*self.console_width):]
-                plot = acp.plot(
-                    self.resize_list(plot_list, self.plot_trial_results_len),
-                    {"height": self.console_height // 4, "format": "{:.4e}"},
-                )
-                self.table_master.add_row(plot)
+                ## plot_list = plot_list[-int(0.9*self.console_width):]
+                # rich_plot = acp.plot(
+                #     self.resize_list(plot_list, self.plot_trial_results_len),
+                #     {"height": self.console_height // 4, "format": "{:.4e}"},
+                # )
+                plot = self.plot_chart_fn(width=self.console_width_plot,  height=self.console_height // 4, 
+                                          plot_list=plot_list)
+                rich_plot = Group(*self.decoder.decode(plot))
+                self.table_master.add_row(rich_plot)
+                # print(plot_list)
             except Exception as e:
-                logger.error(repr(e))
+                print(f"myLoggerCallback - generate_table - {repr(e)}")
+                logger.error(f"myLoggerCallback - generate_table - {repr(e)}")
                 pass
 
         progress = int(self.count_trials * self.live.console.width / self.total_epochs)
@@ -1493,7 +1515,7 @@ class myLoggerCallback(LoggerCallback):
                 f"{result['Avg_duration']}",
                 loss,
                 f"{result['Max_Drawdown_Acct']}",
-                f"{self.count_trials}",
+                # f"{self.count_trials}",
                 f"{(result['time_total_s']):,.2f}",
             )
         )

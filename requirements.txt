@@ -26,7 +26,6 @@ rich==13.9.4
 pyarrow==19.0.1; platform_machine != 'armv7l'
 # progressbar
 progressbar @ git+https://github.com/viotemp1/python-progressbar.git
-asciichartpy
 
 # find first, C search in arrays
 py_find_1st==1.1.7

@@ -862,12 +862,6 @@ class Hyperopt:
             else:
                 stop_cb = None
 
-            f_logfile = self.config.get("logfile")
-            r_logfile = None
-            if f_logfile:
-                s = f_logfile.split(":")
-                if s[0] not in ["syslog", "journald"]:
-                    r_logfile = f_logfile.replace(".log", "_ray.log")
             tuner = tune.Tuner(
                 trainable_with_resources,
                 tune_config=tune.TuneConfig(
@@ -887,7 +881,7 @@ class Hyperopt:
                     storage_path=self.ray_log_dir,
                     stop=stop_cb,
                     callbacks=r_callbacks,
-                    log_to_file=r_logfile if r_logfile is not None else False,
+                    log_to_file=False,
                 ),
             )
 

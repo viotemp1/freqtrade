@@ -622,9 +622,9 @@ class Hyperopt:
         config_jobs = self.config.get("hyperopt_jobs", -1)
         logger.info(f"Number of parallel jobs set as: {config_jobs}")
 
-        # self.opt = self.hyperopter.get_optimizer(
-        #     config_jobs, self.random_state, INITIAL_POINTS, SKOPT_MODEL_QUEUE_SIZE
-        # )
+        not_optimized = self.hyperopter.backtesting.strategy.get_no_optimize_params()
+        not_optimized = deep_merge_dicts(not_optimized, self.hyperopter._get_no_optimize_details())
+        
         # Searcher
         with warnings.catch_warnings():
             warnings.filterwarnings(

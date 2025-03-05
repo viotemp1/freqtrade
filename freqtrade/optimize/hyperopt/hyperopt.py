@@ -17,7 +17,6 @@ from copy import deepcopy
 
 import rapidjson
 from joblib import cpu_count, dump, load
-import gc
 
 from freqtrade.constants import FTHYPT_FILEVERSION, LAST_BT_RESULT_FN, Config
 from freqtrade.enums import HyperoptState
@@ -53,7 +52,6 @@ from rich.style import Style
 from rich.ansi import AnsiDecoder
 # import asciichartpy as acp
 import plotext as plt
-import setproctitle
 from progressbar import ProgressBar
 
 with warnings.catch_warnings():
@@ -114,36 +112,7 @@ logger = logging.getLogger(__name__)
 log_queue: Any
 
 
-def ray_setup_func():
-    try:
-        from optuna.exceptions import ExperimentalWarning
-    
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", category=ExperimentalWarning)
-    except:
-        pass
-
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.INFO)
-
-    os.environ["RAY_TQDM"] = "1"
-    os.environ["RAY_PROFILING"] = "0"
-    os.environ["RAY_DEDUP_LOGS"] = "0"
-    # os.environ["RAY_ENABLE_RECORD_ACTOR_TASK_LOGGING"] = "1"
-    # os.environ["TUNE_DISABLE_AUTO_CALLBACK_LOGGERS"] = "1"
-    os.environ["TUNE_MAX_PENDING_TRIALS_PG"] = (
-        f"{max(4,cpu_count()//4)}"  # f"{max(4,cpu_count()//2)}" 2
-    )
-    # os.environ["FUNCTION_SIZE_WARN_THRESHOLD"] = f"{2 * 10**7}"
-    # os.environ["RAY_memory_monitor_refresh_ms"] = "0" # disable memory check
-    # os.environ["RAY_memory_usage_threshold"] = "1"
-
-    os.environ["SPT_NOENV"] = "1"
-
-    return logger
-
-
-logger = ray_setup_func()
+logger = HyperOptimizer.ray_setup_func()
 
 class Hyperopt:
     """
@@ -256,7 +225,7 @@ class Hyperopt:
 
         self.config_jobs = self.config.get("hyperopt_jobs", -1)
 
-        ray_setup_func()
+        HyperOptimizer.ray_setup_func()
         self.hyperopter = HyperOptimizer(self.config)
 
         if hasattr(self.hyperopter.backtesting.strategy, "plot_metric"):
@@ -266,7 +235,6 @@ class Hyperopt:
                 "plot_metric", "Profit"
             )  # Profit Winrate
 
-    @staticmethod
     def ray_worker_logging_setup_func(self):
         logging.getLogger("ray").setLevel(logging.INFO)
         warnings.simplefilter("always")
@@ -461,7 +429,7 @@ class Hyperopt:
                     f"Ray searcher {searcher} not supported. Please use one of {searchers_list}"
                 )
         if searcher == "optuna" and searcher_param1 is None:
-            searcher_param1 = "NSGAIIISampler"
+            searcher_param1 = "auto_sampler"
         self.searcher = searcher
         self.searcher_param1 = searcher_param1
         logger.info(f"Using searcher {searcher} - {searcher_param1}")
@@ -609,7 +577,7 @@ class Hyperopt:
                         )
                     else:
                         logger.warning(
-                            f"searcher_param1 {self.searcher_param1} not set "
+                            f"searcher_param1 for optuna not set -  {self.searcher_param1}"
                         )
             elif (
                 searcher == "hebo"
@@ -737,7 +705,7 @@ class Hyperopt:
         #     # a chance to be evaluated.
         #     print("No epochs evaluated yet, no best result.")
         
-        ray_setup_func()
+        HyperOptimizer.ray_setup_func()
 
         try:
             # print(f"ray.init - {os.getcwd()}")
@@ -746,7 +714,7 @@ class Hyperopt:
             # Path("./logs").mkdir(parents=True, exist_ok=True)
 
             trainable_with_parameters = tune.with_parameters(
-                objective,
+                HyperOptimizer.objective,
                 config_ft=self.config,
                 backtesting=self.hyperopter.backtesting,
                 custom_trade_info=(
@@ -809,7 +777,7 @@ class Hyperopt:
                             self.config["user_data_dir"], "strategies"
                         )
                     },
-                    "worker_process_setup_hook": ray_setup_func,
+                    "worker_process_setup_hook": HyperOptimizer.ray_setup_func,
                 },
                 _system_config={
                     "prestart_worker_first_driver": True,
@@ -1046,205 +1014,6 @@ class Hyperopt:
         # print(self.current_best_epoch.metrics)
         # {'Trades': '4681', 'Win_Draw_Loss_Win_perc': '3517     0  1164  75.1', 'Avg_profit': '  3.12%', 'Profit': '195340381.096 USDT (19,534,038.11%)', 'Avg_duration': '0 days 21:49:00', 'Objective': '-38,157,864.48667', 'is_profit': True, 'Max_Drawdown_Acct': '  5274021.894 USDT    (5.18%)', 'loss': -38157864.486667246, 'timestamp': 1718690291, 'checkpoint_dir_name': None, 'done': True, 'training_iteration': 1, 'trial_id': '06452780', 'date': '2024-06-18_08-58-11', 'time_this_iter_s': 61.3154194355011, 'time_total_s': 61.3154194355011, 'pid': 1931179, 'hostname': 'vioUbuntu2', 'node_ip': '10.0.0.251', 'config': {'buy_fastk_rsi_patterns': 95, 'buy_max_slippage': 1.075, 'buy_prev_cbuys_count': 3, 'buy_prev_cbuys_rwindow': 5, 'buy_prev_min_close_age': 8, 'buy_prev_min_close_perc': 37.4, 'buy_prev_min_close_rwindow': 5, 'buy_proposed_stake_limit': 3731, 'buy_proposed_stake_limit_margin': 0.208, 'csl_5_step1_SL': 0.052, 'csl_5_step1_time': 591.366, 'csl_5_step2_SL': 0.035, 'csl_5_step2_time': 1625.187, 'csl_5_step3_SL': 0.075, 'csl_5_step3_time': 3717.144, 'csl_5_step4_SL': 0.248, 'sell_order_max_age': 2.8, 'sell_order_min_profit': 0.06, 'stoploss': -0.097}, 'time_since_restore': 61.3154194355011, 'iterations_since_restore': 1, 'experiment_tag': '139_buy_fastk_rsi_patterns=95,buy_max_slippage=1.0750,buy_prev_cbuys_count=3,buy_prev_cbuys_rwindow=5,buy_prev_min_close_age=8,buy_prev_min_close_perc=37.4000,buy_prev_min_close_rwindow=5,buy_proposed_stake_limit=3731,buy_proposed_stake_limit_margin=0.2080,csl_5_step1_SL=0.0520,csl_5_step1_time=591.3660,csl_5_step2_SL=0.0350,csl_5_step2_time=1625.1870,csl_5_step3_SL=0.0750,csl_5_step3_time=3717.1440,csl_5_step4_SL=0.2480,sell_order_max_age=2.8000,sell_order_min_profit=0.0600,stoploss=-0.0970'}
 
-
-def objective(
-    config: Dict[str, Any],
-    config_ft: Dict,
-    backtesting: Backtesting,
-    custom_trade_info: Dict,
-    dimensions_ft: Dict,
-    data_pickle_file_ft: str,
-    detail_data_pickle_file_ft: str,
-    min_date_ft: str,
-    max_date_ft: str,
-    total_epochs_ft: int,
-    custom_hyperopt_ft: Any,
-    _get_results_dict_ft: Any,
-    # _save_result_ft: Any,
-    results_file_ft: Path,
-    max_memory_per_worker: float,
-) -> Dict[str, Any]:
-    """
-    Used Optimize function.
-    Called once per epoch to optimize whatever is configured.
-    Keep this function as optimized as possible!
-    """
-
-    logger = ray_setup_func()
-    # logger.info(f"ray hyperopt objective - ray_available_resources: {ray.available_resources()}")
-    mem_available = ray.available_resources().get("memory", 0)
-
-    # ray_current_workers = ray.util.state.list_workers(
-    #     address=ray.get_runtime_context().gcs_address,
-    #     filters=[("is_alive", "=", "True")],
-    #     raise_on_missing_output=False,
-    # )
-    # logger.info(f"ray workers: {len(ray_current_workers)} - {ray_current_workers}")
-
-    # ray_current_tasks = ray.util.state.list_tasks(
-    #     address=ray.get_runtime_context().gcs_address,
-    #     filters=[("state", "!=", "FINISHED")],
-    #     raise_on_missing_output=False,
-    # )
-    # logger.info(f"ray tasks: {len(ray_current_tasks)} - {ray_current_tasks}")
-
-    obj_id = ray.get_runtime_context().get_task_id()[:10]
-    # logger.error(f"""worker_id: {ray.get_runtime_context().get_worker_id()} /
-    #     actor_id: {ray.get_runtime_context().get_actor_id()} /
-    #     job_id: {ray.get_runtime_context().get_job_id()} /
-    #     task_id: {ray.get_runtime_context().get_task_id()}
-    #     """)
-
-    strategy_name = backtesting.strategy.get_strategy_name()
-    setproctitle.setproctitle(f"ray::{strategy_name}::{obj_id}")
-    os.chdir(Path(config_ft["user_data_dir"]).parent.absolute())
-
-    # mem_used = psutil.virtual_memory().percent
-    # if max_used_memory > 0 and mem_used > max_used_memory:
-    #     logger.warning(f"objective paused - high memory usage {mem_used}")
-    #     while psutil.virtual_memory().percent > max_used_memory:
-    #         sleep(60)
-    #     logger.warning(
-    #         f"objective resumed - memory usage {psutil.virtual_memory().percent}"
-    #     )
-
-    # print(f"objective start - {os.getcwd()}")
-    logger.debug(f"objective start - {os.getcwd()}")
-    if custom_trade_info is not None:
-        backtesting.strategy.custom_trade_info = custom_trade_info
-
-    HyperoptStateContainer.set_state(HyperoptState.OPTIMIZE)
-    backtest_start_time = datetime.now(timezone.utc)
-    params_dict = _get_params_dict(dimensions_ft, config)
-    # logger.info(f"params_dict - {params_dict}")
-
-    # Apply parameters
-    if HyperoptTools.has_space(config_ft, "buy"):
-        assign_params(backtesting, params_dict, "buy")
-
-    if HyperoptTools.has_space(config_ft, "sell"):
-        assign_params(backtesting, params_dict, "sell")
-
-    if HyperoptTools.has_space(config_ft, "protection"):
-        assign_params(backtesting, params_dict, "protection")
-
-    if HyperoptTools.has_space(config_ft, "roi"):
-        backtesting.strategy.minimal_roi = custom_hyperopt_ft.generate_roi_table(
-            params_dict
-        )
-
-    if HyperoptTools.has_space(config_ft, "stoploss"):
-        backtesting.strategy.stoploss = params_dict["stoploss"]
-
-    if HyperoptTools.has_space(config_ft, "trailing"):
-        d = custom_hyperopt_ft.generate_trailing_params(params_dict)
-        backtesting.strategy.trailing_stop = d["trailing_stop"]
-        backtesting.strategy.trailing_stop_positive = d["trailing_stop_positive"]
-        backtesting.strategy.trailing_stop_positive_offset = d[
-            "trailing_stop_positive_offset"
-        ]
-        backtesting.strategy.trailing_only_offset_is_reached = d[
-            "trailing_only_offset_is_reached"
-        ]
-
-    if HyperoptTools.has_space(config_ft, "trades"):
-        if config_ft["stake_amount"] == "unlimited" and (
-            params_dict["max_open_trades"] == -1 or params_dict["max_open_trades"] == 0
-        ):
-            # Ignore unlimited max open trades if stake amount is unlimited
-            params_dict.update({"max_open_trades": config_ft["max_open_trades"]})
-
-        updated_max_open_trades = (
-            int(params_dict["max_open_trades"])
-            if (
-                params_dict["max_open_trades"] != -1
-                and params_dict["max_open_trades"] != 0
-            )
-            else float("inf")
-        )
-
-        config_ft.update({"max_open_trades": updated_max_open_trades})
-
-        backtesting.strategy.max_open_trades = updated_max_open_trades
-
-    # logger.warning(f"params_dict - {params_dict}")
-
-    with data_pickle_file_ft.open("rb") as f:
-        processed = load(f, mmap_mode="r")
-        # if self.analyze_per_epoch:
-        #     # Data is not yet analyzed, rerun populate_indicators.
-        #     processed = self.advise_and_trim(processed)
-
-    if backtesting.timeframe_detail:
-        with detail_data_pickle_file_ft.open("rb") as f:
-            backtesting.detail_data = load(f, mmap_mode="r")
-
-    bt_results = backtesting.backtest(
-        processed=processed, start_date=min_date_ft, end_date=max_date_ft
-    )
-    backtest_end_time = datetime.now(timezone.utc)
-    bt_results.update(
-        {
-            "backtest_start_time": int(backtest_start_time.timestamp()),
-            "backtest_end_time": int(backtest_end_time.timestamp()),
-        }
-    )
-    result = _get_results_dict_ft(
-        backtesting,
-        bt_results,
-        min_date_ft,
-        max_date_ft,
-        params_dict,
-        processed=processed,
-    )
-    result["runtime_s"] = int(backtest_end_time.timestamp()) - int(
-        backtest_start_time.timestamp()
-    )
-
-    ray_result_tmp = HyperoptTools.get_result_dict(
-        config_ft,
-        result,
-        total_epochs_ft,
-    )
-    # print("objective result", result)
-    loss = result["loss"]
-    ray_result_tmp["loss"] = [result["loss"]]
-    ray_result_tmp["params_dict"] = [str(result["params_dict"])]
-    ray_result_tmp["profit_perc"] = [100.0 * result["total_profit"]]
-
-    ray_result = {}
-    for key, val in ray_result_tmp.items():
-        ray_result[key] = val[0]
-
-    backtesting = None
-
-    gc.collect()
-
-    # print(ray_result)
-    # _save_result_ft(result, results_file_ft)
-
-    # train.report(ray_result)
-    return ray_result
-
-def assign_params(backtesting: Backtesting, params_dict: dict[str, Any], category: str) -> None:
-    """
-    Assign hyperoptable parameters
-    """
-    for attr_name, attr in backtesting.strategy.enumerate_parameters(category):
-        if attr.optimize:
-            # noinspection PyProtectedMember
-            attr.value = params_dict[attr_name]
-
-def _get_params_dict(dimensions: {}, raw_params: {}) -> Dict:
-    # Ensure the number of dimensions match
-    # the number of parameters in the list.
-    if len(raw_params) != len(dimensions):
-        raise ValueError("Mismatch in number of search-space dimensions.")
-
-    # Return a dict where the keys are the names of the dimensions
-    # and the values are taken from the list of parameters.
-    # return {d.name: v for d, v in zip(dimensions, raw_params)}
-    return raw_params
 
 # https://github.com/Textualize/rich/discussions/482
 class myLoggerCallback(LoggerCallback):

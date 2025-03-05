@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from copy import deepcopy
 
 import rapidjson
+import json
 from joblib import cpu_count, dump, load
 
 from freqtrade.constants import FTHYPT_FILEVERSION, LAST_BT_RESULT_FN, Config
@@ -65,8 +66,6 @@ with warnings.catch_warnings():
     from ray import tune, train
     from ray.train import RunConfig
     from ray.tune.search import ConcurrencyLimiter
-
-    # from ray.tune.stopper import ExperimentPlateauStopper
     from ray.util.state import summarize_tasks
     from ray.tune.logger import LoggerCallback
     from ray.tune.stopper.stopper import Stopper
@@ -1424,6 +1423,7 @@ class ExperimentPlateauStopper(Stopper):
         self._best_result = np.inf if mode == "min" else -np.inf
         self._trials_ids = []
         self._last_result = 0
+        self.std_value = 0
 
     def __call__(self, trial_id, result):
         """Return a boolean representing if the tuning has to stop."""
@@ -1451,8 +1451,6 @@ class ExperimentPlateauStopper(Stopper):
                 else:
                     self._iterations_noinc += 1
 
-            std_value = abs(np.std(self._top_values) / np.mean(self._top_values))
-
             # If the current iteration has to stop
             has_plateaued = self.has_plateaued()
             no_increase = self.no_increase()
@@ -1469,20 +1467,6 @@ class ExperimentPlateauStopper(Stopper):
                 has_plateaued and self._iterations_plateau >= self._patience
             ) or no_increase
 
-            # logger.warning(
-            #     f"myExperimentPlateauStopper - {trial_id} {result[self._metric]} - _current_epoch: {self._current_epoch} / _best_epoch: {self._best_epoch} / "
-            #     f"_iterations_plateau: {self._iterations_plateau}/_iterations_noinc:{self._iterations_noinc}/{self._patience} / "
-            #     f"has_plateaued: {has_plateaued} / no_increase: {no_increase} / stop_all: {stop_all} / "
-            #     f"len_top_values: {len(self._top_values)} / std: {std_value}"
-            # )
-
-            if stop_all:
-                logger.info(
-                    f"myExperimentPlateauStopper - current_epoch: {self._current_epoch} / best_epoch: {self._best_epoch} / "
-                    f"iterations_plateau: {self._iterations_plateau}/ iterations_noinc: {self._iterations_noinc} / patience: {self._patience} / "
-                    f"has_plateaued: {has_plateaued} / no_increase: {no_increase} / stop_all: {stop_all} / std: {std_value} / "
-                    f"last_result: {self._last_result} / best_result: {self._best_result}"
-                )
         return stop_all
 
     def has_plateaued(self):
@@ -1496,9 +1480,18 @@ class ExperimentPlateauStopper(Stopper):
 
     def stop_all(self):
         """Return whether to stop and prevent trials from starting."""
-        return (
-            self.has_plateaued() and self._iterations_plateau >= self._patience
-        ) or (self.no_increase() and self._iterations_noinc >= self._patience)
+        stop_all = (
+                        self.has_plateaued() and self._iterations_plateau >= self._patience
+                    ) or (self.no_increase() and self._iterations_noinc >= self._patience)
+        self.std_value = abs(np.std(self._top_values) / np.mean(self._top_values))
+        if stop_all:
+            logger.info(
+                f"ExperimentPlateauStopper - current_epoch: {self._current_epoch} / best_epoch: {self._best_epoch} / "
+                f"iterations_plateau: {self._iterations_plateau}/ iterations_noinc: {self._iterations_noinc} / patience: {self._patience} / "
+                f"has_plateaued: {self.has_plateaued()} / no_increase: {self.no_increase()} / std: {self.std_value} / "
+                f"last_result: {self._last_result} / best_result: {self._best_result}"
+            )
+        return stop_all
 
 
 def port_in_use(port):

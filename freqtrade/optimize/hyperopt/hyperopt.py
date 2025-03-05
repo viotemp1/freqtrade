@@ -1484,13 +1484,13 @@ class ExperimentPlateauStopper(Stopper):
                         self.has_plateaued() and self._iterations_plateau >= self._patience
                     ) or (self.no_increase() and self._iterations_noinc >= self._patience)
         self.std_value = abs(np.std(self._top_values) / np.mean(self._top_values))
-        if stop_all:
-            logger.info(
-                f"ExperimentPlateauStopper - current_epoch: {self._current_epoch} / best_epoch: {self._best_epoch} / "
-                f"iterations_plateau: {self._iterations_plateau}/ iterations_noinc: {self._iterations_noinc} / patience: {self._patience} / "
-                f"has_plateaued: {self.has_plateaued()} / no_increase: {self.no_increase()} / std: {self.std_value} / "
-                f"last_result: {self._last_result} / best_result: {self._best_result}"
-            )
+        # if stop_all:
+        #     logger.info(
+        #         f"ExperimentPlateauStopper - current_epoch: {self._current_epoch} / best_epoch: {self._best_epoch} / "
+        #         f"iterations_plateau: {self._iterations_plateau}/ iterations_noinc: {self._iterations_noinc} / patience: {self._patience} / "
+        #         f"has_plateaued: {self.has_plateaued()} / no_increase: {self.no_increase()} / std: {self.std_value} / "
+        #         f"last_result: {self._last_result} / best_result: {self._best_result}"
+        #     )
         return stop_all
 
 

@@ -13,8 +13,11 @@ from typing import Any, Dict, List, Optional, Tuple
 import os
 from joblib import cpu_count, dump, load
 from joblib.externals import cloudpickle
+import ray
 from pandas import DataFrame
 from pathlib import Path
+import setproctitle
+import gc
 
 from freqtrade.constants import DATETIME_PRINT_FORMAT, Config
 from freqtrade.data.converter import trim_dataframes
@@ -530,7 +533,6 @@ class HyperOptimizer:
                 processed=processed,
                 backtest_stats=strat_stats,
             )
-        # gc.collect()
         return {
             "loss": loss,
             "params_dict": params_dict,
@@ -577,13 +579,13 @@ class HyperOptimizer:
 
     @staticmethod
     def ray_setup_func():
-        try:
-            from optuna.exceptions import ExperimentalWarning
+        # try:
+        #     from optuna.exceptions import ExperimentalWarning
         
-            with warnings.catch_warnings():
-                warnings.filterwarnings("ignore", category=ExperimentalWarning)
-        except:
-            pass
+        #     with warnings.catch_warnings():
+        #         warnings.filterwarnings("ignore", category=ExperimentalWarning)
+        # except:
+        #     pass
     
         logger = logging.getLogger(__name__)
         logger.setLevel(logging.INFO)
@@ -628,7 +630,7 @@ class HyperOptimizer:
         Keep this function as optimized as possible!
         """
     
-        logger = self.ray_setup_func()
+        logger = HyperOptimizer.ray_setup_func()
         # logger.info(f"ray hyperopt objective - ray_available_resources: {ray.available_resources()}")
         mem_available = ray.available_resources().get("memory", 0)
     
@@ -673,18 +675,18 @@ class HyperOptimizer:
     
         HyperoptStateContainer.set_state(HyperoptState.OPTIMIZE)
         backtest_start_time = datetime.now(timezone.utc)
-        params_dict = self._get_params_dict(dimensions_ft, config)
+        params_dict = HyperOptimizer._get_params_dict(dimensions_ft, config)
         # logger.info(f"params_dict - {params_dict}")
     
         # Apply parameters
         if HyperoptTools.has_space(config_ft, "buy"):
-            self.assign_params(backtesting, params_dict, "buy")
+            HyperOptimizer.assign_params(backtesting, params_dict, "buy")
     
         if HyperoptTools.has_space(config_ft, "sell"):
-            self.assign_params(backtesting, params_dict, "sell")
+            HyperOptimizer.assign_params(backtesting, params_dict, "sell")
     
         if HyperoptTools.has_space(config_ft, "protection"):
-            self.assign_params(backtesting, params_dict, "protection")
+            HyperOptimizer.assign_params(backtesting, params_dict, "protection")
     
         if HyperoptTools.has_space(config_ft, "roi"):
             backtesting.strategy.minimal_roi = custom_hyperopt_ft.generate_roi_table(

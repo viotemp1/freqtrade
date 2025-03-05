@@ -17,7 +17,6 @@ from copy import deepcopy
 
 import rapidjson
 from joblib import cpu_count, dump, load
-import gc
 
 from freqtrade.constants import FTHYPT_FILEVERSION, LAST_BT_RESULT_FN, Config
 from freqtrade.enums import HyperoptState
@@ -53,16 +52,13 @@ from rich.style import Style
 from rich.ansi import AnsiDecoder
 # import asciichartpy as acp
 import plotext as plt
-import setproctitle
 from progressbar import ProgressBar
+from optuna.exceptions import ExperimentalWarning
 
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=FutureWarning)
-    try:
-        from optuna.exceptions import ExperimentalWarning
-        warnings.filterwarnings("ignore", category=ExperimentalWarning)
-    except:
-        pass
+    warnings.filterwarnings("ignore", category=ExperimentalWarning)
+
     from skopt import Optimizer
     from skopt.space import Dimension
     import ray
@@ -111,7 +107,7 @@ optunahub_samplers = [
 ]
 
 logger = logging.getLogger(__name__)
-log_queue: Any
+# log_queue: Any
 
 
 logger = HyperOptimizer.ray_setup_func()
@@ -387,14 +383,14 @@ class Hyperopt:
 
     #     self._save_result(val)
 
-    def _setup_logging_mp_workaround(self) -> None:
-        """
-        Workaround for logging in child processes.
-        local_queue must be a global in the file that initializes Parallel.
-        """
-        global log_queue
-        m = Manager()
-        log_queue = m.Queue()
+    # def _setup_logging_mp_workaround(self) -> None:
+    #     """
+    #     Workaround for logging in child processes.
+    #     local_queue must be a global in the file that initializes Parallel.
+    #     """
+    #     global log_queue
+    #     m = Manager()
+    #     log_queue = m.Queue()
 
     # searchers: ['variant_generator', 'random', 'hyperopt', 'bohb', 'nevergrad', 'optuna', 'zoopt', 'hebo']
     # 'bayesopt' - not suported - does not suport Integer
@@ -431,7 +427,7 @@ class Hyperopt:
                     f"Ray searcher {searcher} not supported. Please use one of {searchers_list}"
                 )
         if searcher == "optuna" and searcher_param1 is None:
-            searcher_param1 = "NSGAIIISampler"
+            searcher_param1 = "auto_sampler"
         self.searcher = searcher
         self.searcher_param1 = searcher_param1
         logger.info(f"Using searcher {searcher} - {searcher_param1}")
@@ -481,106 +477,100 @@ class Hyperopt:
                     random_state=random_state,
                 )
             elif searcher == "optuna":
-                from optuna.exceptions import ExperimentalWarning
+                import optuna
 
-                with warnings.catch_warnings():
-                    warnings.filterwarnings(
-                        action="ignore", category=ExperimentalWarning
+                # TPESampler NSGAIIISampler CmaEsSampler GPSampler NSGAIISampler QMCSampler
+                if self.searcher_param1:
+                    if self.searcher_param1 in optunahub_samplers:
+                        import optunahub, inspect
+
+                        ohsmodule = optunahub.load_module(
+                            f"samplers/{self.searcher_param1}"
+                        )
+                        if self.searcher_param1 == "auto_sampler":
+                            sampler_m = ohsmodule.AutoSampler
+                        elif self.searcher_param1 == "differential_evolution":
+                            sampler_m = ohsmodule.DESampler
+                        elif self.searcher_param1 == "hebo":
+                            sampler_m = ohsmodule.HEBOSampler
+                        # elif self.searcher_param1 == "implicit_natural_gradient":
+                        #     sampler_m = ohsmodule.ImplicitNaturalGradientSampler
+                        # elif self.searcher_param1 == "moead":
+                        #     sampler_m = ohsmodule.MOEADSampler
+                        elif self.searcher_param1 == "mocma":
+                            sampler_m = ohsmodule.MoCmaSampler
+                        elif self.searcher_param1 == "nelder_mead":
+                            sampler_m = ohsmodule.NelderMeadSampler
+                        elif self.searcher_param1 == "nsgaii_with_tpe_warmup":
+                            sampler_m = ohsmodule.NSGAIIWithTPEWarmupSampler
+                        elif self.searcher_param1 == "whale_optimization":
+                            sampler_m = ohsmodule.WhaleOptimizationSampler
+                        elif self.searcher_param1 == "simulated_annealing":
+                            sampler_m = ohsmodule.SimulatedAnnealingSample
+                        else:
+                            logger.warning(
+                                f"searcher_param1 {self.searcher_param1} not supported - {optunahub_samplers}"
+                            )
+
+                        # if self.searcher_param1 in ["nsgaii_with_tpe_warmup"]:
+                        #     sampler_m = inspect.getmembers(ohsmodule)[2][1]
+                        # else:
+                        #     sampler_m = inspect.getmembers(ohsmodule)[0][1]
+                        try:
+                            optuna__sampler = sampler_m(seed=random_state)
+                        except:
+                            logger.warning(
+                                f"Cannot set random_state_seed {random_state} for {self.searcher}"
+                            )
+                            optuna__sampler = sampler_m()
+                            pass
+                    elif self.searcher_param1 == "NSGAIIISampler":
+                        optuna__sampler = optuna.samplers.NSGAIIISampler(
+                            seed=random_state
+                        )
+                    elif self.searcher_param1 == "AutoSampler":
+                        import optunahub
+
+                        optuna__sampler = optunahub.load_module(
+                            "samplers/auto_sampler"
+                        ).AutoSampler(seed=random_state)
+                    elif self.searcher_param1 == "CmaEsSampler":
+                        optuna__sampler = optuna.samplers.CmaEsSampler(
+                            seed=random_state
+                        )
+                    elif self.searcher_param1 == "GPSampler":
+                        optuna__sampler = optuna.samplers.GPSampler(
+                            seed=random_state
+                        )
+                    elif self.searcher_param1 == "NSGAIISampler":
+                        optuna__sampler = optuna.samplers.NSGAIISampler(
+                            seed=random_state
+                        )
+                    elif self.searcher_param1 == "TPESampler":
+                        optuna__sampler = optuna.samplers.TPESampler(
+                            seed=random_state
+                        )
+                    elif self.searcher_param1 == "QMCSampler":
+                        optuna__sampler = optuna.samplers.QMCSampler(
+                            seed=random_state,
+                            warn_independent_sampling=False,
+                        )
+                    elif self.searcher_param1 == "BoTorchSampler":
+                        optuna__sampler = optuna.integration.BoTorchSampler(
+                            seed=random_state
+                        )
+                    else:  # default
+                        optuna__sampler = optuna.samplers.TPESampler(
+                            seed=random_state
+                        )
+                    searcher_algo = tune.create_searcher(
+                        searcher,
+                        sampler=optuna__sampler,
                     )
-                    import optuna
-
-                    # TPESampler NSGAIIISampler CmaEsSampler GPSampler NSGAIISampler QMCSampler
-                    if self.searcher_param1:
-                        if self.searcher_param1 in optunahub_samplers:
-                            import optunahub, inspect
-
-                            ohsmodule = optunahub.load_module(
-                                f"samplers/{self.searcher_param1}"
-                            )
-                            if self.searcher_param1 == "auto_sampler":
-                                sampler_m = ohsmodule.AutoSampler
-                            elif self.searcher_param1 == "differential_evolution":
-                                sampler_m = ohsmodule.DESampler
-                            elif self.searcher_param1 == "hebo":
-                                sampler_m = ohsmodule.HEBOSampler
-                            # elif self.searcher_param1 == "implicit_natural_gradient":
-                            #     sampler_m = ohsmodule.ImplicitNaturalGradientSampler
-                            # elif self.searcher_param1 == "moead":
-                            #     sampler_m = ohsmodule.MOEADSampler
-                            elif self.searcher_param1 == "mocma":
-                                sampler_m = ohsmodule.MoCmaSampler
-                            elif self.searcher_param1 == "nelder_mead":
-                                sampler_m = ohsmodule.NelderMeadSampler
-                            elif self.searcher_param1 == "nsgaii_with_tpe_warmup":
-                                sampler_m = ohsmodule.NSGAIIWithTPEWarmupSampler
-                            elif self.searcher_param1 == "whale_optimization":
-                                sampler_m = ohsmodule.WhaleOptimizationSampler
-                            elif self.searcher_param1 == "simulated_annealing":
-                                sampler_m = ohsmodule.SimulatedAnnealingSample
-                            else:
-                                logger.warning(
-                                    f"searcher_param1 {self.searcher_param1} not supported - {optunahub_samplers}"
-                                )
-
-                            # if self.searcher_param1 in ["nsgaii_with_tpe_warmup"]:
-                            #     sampler_m = inspect.getmembers(ohsmodule)[2][1]
-                            # else:
-                            #     sampler_m = inspect.getmembers(ohsmodule)[0][1]
-                            try:
-                                optuna__sampler = sampler_m(seed=random_state)
-                            except:
-                                logger.warning(
-                                    f"Cannot set random_state_seed {random_state} for {self.searcher}"
-                                )
-                                optuna__sampler = sampler_m()
-                                pass
-                        elif self.searcher_param1 == "NSGAIIISampler":
-                            optuna__sampler = optuna.samplers.NSGAIIISampler(
-                                seed=random_state
-                            )
-                        elif self.searcher_param1 == "AutoSampler":
-                            import optunahub
-
-                            optuna__sampler = optunahub.load_module(
-                                "samplers/auto_sampler"
-                            ).AutoSampler(seed=random_state)
-                        elif self.searcher_param1 == "CmaEsSampler":
-                            optuna__sampler = optuna.samplers.CmaEsSampler(
-                                seed=random_state
-                            )
-                        elif self.searcher_param1 == "GPSampler":
-                            optuna__sampler = optuna.samplers.GPSampler(
-                                seed=random_state
-                            )
-                        elif self.searcher_param1 == "NSGAIISampler":
-                            optuna__sampler = optuna.samplers.NSGAIISampler(
-                                seed=random_state
-                            )
-                        elif self.searcher_param1 == "TPESampler":
-                            optuna__sampler = optuna.samplers.TPESampler(
-                                seed=random_state
-                            )
-                        elif self.searcher_param1 == "QMCSampler":
-                            optuna__sampler = optuna.samplers.QMCSampler(
-                                seed=random_state,
-                                warn_independent_sampling=False,
-                            )
-                        elif self.searcher_param1 == "BoTorchSampler":
-                            optuna__sampler = optuna.integration.BoTorchSampler(
-                                seed=random_state
-                            )
-                        else:  # default
-                            optuna__sampler = optuna.samplers.TPESampler(
-                                seed=random_state
-                            )
-                        searcher_algo = tune.create_searcher(
-                            searcher,
-                            sampler=optuna__sampler,
-                        )
-                    else:
-                        logger.warning(
-                            f"searcher_param1 {self.searcher_param1} not set "
-                        )
+                else:
+                    logger.warning(
+                        f"searcher_param1 for optuna not set -  {self.searcher_param1}"
+                    )
             elif (
                 searcher == "hebo"
             ):  # gp gpy gpy_mlp psgld svidkl deep_ensemble rf catboost svgp mcbn masked_deep_ensemble fe_deep_ensemble gumbel
@@ -636,9 +626,13 @@ class Hyperopt:
         #     config_jobs, self.random_state, INITIAL_POINTS, SKOPT_MODEL_QUEUE_SIZE
         # )
         # Searcher
-        self.opt, self.scheduler = self.get_search_algo_scheduler(config_jobs, self.random_state)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                action="ignore", category=ExperimentalWarning
+            )
+            self.opt, self.scheduler = self.get_search_algo_scheduler(config_jobs, self.random_state)
         
-        self._setup_logging_mp_workaround()
+        # self._setup_logging_mp_workaround()
         # try:
         #     with Parallel(n_jobs=config_jobs) as parallel:
         #         jobs = parallel._effective_n_jobs()
@@ -715,157 +709,162 @@ class Hyperopt:
 
             # Path("./logs").mkdir(parents=True, exist_ok=True)
 
-            trainable_with_parameters = tune.with_parameters(
-                HyperOptimizer.objective,
-                config_ft=self.config,
-                backtesting=self.hyperopter.backtesting,
-                custom_trade_info=(
-                    self.hyperopter.backtesting.strategy.custom_trade_info
-                    if hasattr(self.hyperopter.backtesting.strategy, "custom_trade_info")
-                    else None
-                ),
-                dimensions_ft=self.hyperopter.dimensions,
-                data_pickle_file_ft=self.data_pickle_file,
-                detail_data_pickle_file_ft=self.detail_data_pickle_file,
-                min_date_ft=self.hyperopter.min_date,
-                max_date_ft=self.hyperopter.max_date,
-                total_epochs_ft=self.total_epochs,
-                custom_hyperopt_ft=self.hyperopter.custom_hyperopt,
-                _get_results_dict_ft=self.hyperopter._get_results_dict,
-                # _save_result_ft=self._save_result,
-                results_file_ft=self.results_file,
-                max_memory_per_worker=self.ray_max_memory // self.config_jobs,
-            )
-            if self.ray_max_memory is None:
-                trainable_with_resources = tune.with_resources(
-                    trainable_with_parameters, {"CPU": cpus // self.config_jobs}
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    action="ignore", category=ExperimentalWarning
                 )
-                logger.debug(
-                    f"ray resources per worker: CPU: {cpus // self.config_jobs}/{cpus}"
-                )
-            else:
-                trainable_with_resources = tune.with_resources(
-                    trainable_with_parameters,
-                    tune.PlacementGroupFactory(
-                        [
-                            {
-                                "CPU": 0.95 * cpus // self.config_jobs,
-                                "memory": 0.95 * self.ray_max_memory / self.config_jobs,
-                            }
-                        ]
+            
+                trainable_with_parameters = tune.with_parameters(
+                    HyperOptimizer.objective,
+                    config_ft=self.config,
+                    backtesting=self.hyperopter.backtesting,
+                    custom_trade_info=(
+                        self.hyperopter.backtesting.strategy.custom_trade_info
+                        if hasattr(self.hyperopter.backtesting.strategy, "custom_trade_info")
+                        else None
                     ),
-                    # {
-                    #     "cpu": cpus // self.config_jobs,
-                    #     "memory": self.ray_max_memory // self.config_jobs,
-                    # },
+                    dimensions_ft=self.hyperopter.dimensions,
+                    data_pickle_file_ft=self.data_pickle_file,
+                    detail_data_pickle_file_ft=self.detail_data_pickle_file,
+                    min_date_ft=self.hyperopter.min_date,
+                    max_date_ft=self.hyperopter.max_date,
+                    total_epochs_ft=self.total_epochs,
+                    custom_hyperopt_ft=self.hyperopter.custom_hyperopt,
+                    _get_results_dict_ft=self.hyperopter._get_results_dict,
+                    # _save_result_ft=self._save_result,
+                    results_file_ft=self.results_file,
+                    max_memory_per_worker=self.ray_max_memory // self.config_jobs,
                 )
-                logger.debug(
-                    f"ray resources per worker: CPU: {cpus // self.config_jobs}/{cpus} - MEM: {(self.ray_max_memory / self.config_jobs):,.2f}/{(self.ray_max_memory):,.2f}"
-                )
-            ray.init(
-                ignore_reinit_error=True,
-                include_dashboard=self.ray_dashboard,
-                dashboard_port=find_first_free_port(self.ray_dashboard_port),  # None
-                _node_ip_address="127.0.0.1",  # 127.0.0.1 0.0.0.0 socket.gethostbyname(socket.gethostname())
-                _memory=self.ray_max_memory,
-                object_store_memory=min(
-                    5 * 10**9, 0.05 * psutil.virtual_memory().total
-                ),  # 10**9
-                _redis_max_memory=min(10**9, 0.01 * psutil.virtual_memory().total),
-                runtime_env={
-                    "worker_process_setup_hook": self.ray_worker_logging_setup_func,
-                    "env_vars": {
-                        "PYTHONPATH": os.path.join(
-                            self.config["user_data_dir"], "strategies"
-                        )
+                if self.ray_max_memory is None:
+                    trainable_with_resources = tune.with_resources(
+                        trainable_with_parameters, {"CPU": cpus // self.config_jobs}
+                    )
+                    logger.debug(
+                        f"ray resources per worker: CPU: {cpus // self.config_jobs}/{cpus}"
+                    )
+                else:
+                    trainable_with_resources = tune.with_resources(
+                        trainable_with_parameters,
+                        tune.PlacementGroupFactory(
+                            [
+                                {
+                                    "CPU": 0.95 * cpus // self.config_jobs,
+                                    "memory": 0.95 * self.ray_max_memory / self.config_jobs,
+                                }
+                            ]
+                        ),
+                        # {
+                        #     "cpu": cpus // self.config_jobs,
+                        #     "memory": self.ray_max_memory // self.config_jobs,
+                        # },
+                    )
+                    logger.debug(
+                        f"ray resources per worker: CPU: {cpus // self.config_jobs}/{cpus} - MEM: {(self.ray_max_memory / self.config_jobs):,.2f}/{(self.ray_max_memory):,.2f}"
+                    )
+                ray.init(
+                    ignore_reinit_error=True,
+                    include_dashboard=self.ray_dashboard,
+                    dashboard_port=find_first_free_port(self.ray_dashboard_port),  # None
+                    _node_ip_address="127.0.0.1",  # 127.0.0.1 0.0.0.0 socket.gethostbyname(socket.gethostname())
+                    _memory=self.ray_max_memory,
+                    object_store_memory=min(
+                        5 * 10**9, 0.05 * psutil.virtual_memory().total
+                    ),  # 10**9
+                    _redis_max_memory=min(10**9, 0.01 * psutil.virtual_memory().total),
+                    runtime_env={
+                        "worker_process_setup_hook": self.ray_worker_logging_setup_func,
+                        "env_vars": {
+                            "PYTHONPATH": os.path.join(
+                                self.config["user_data_dir"], "strategies"
+                            )
+                        },
+                        "worker_process_setup_hook": HyperOptimizer.ray_setup_func,
                     },
-                    "worker_process_setup_hook": HyperOptimizer.ray_setup_func,
-                },
-                _system_config={
-                    "prestart_worker_first_driver": True,
-                    "enable_worker_prestart": True,
-                    "num_workers_soft_limit": max(self.config_jobs // 2, 2),
-                },
-                configure_logging=True,
-                logging_level="info",
-                log_to_driver=True,
-                logging_config=ray.LoggingConfig(encoding="TEXT", log_level="INFO"),
-                _temp_dir=self.ray_log_dir,
-            )
-            mem_available_bytes = ray.available_resources().get("memory", 0)
-            mem_available_perc = (
-                100.0 * mem_available_bytes / psutil.virtual_memory().total
-            )
-            # logging.getLogger(__name__).setLevel(logging.INFO)
-            logger.info(
-                f"ray available memory (before tune): {(mem_available_perc):,.2f}% - {(mem_available_bytes/10**9):,.2f}GB/{(psutil.virtual_memory().total/10**9):,.2f}GB"
-            )
-
-            if (
-                self.print_all or self.plot_chart
-            ):  # self.print_hyperopt_results or  and sys.stdout.isatty()
-                r_callbacks = [
-                    myLoggerCallback(
-                        strategy=self.strategy_name,
-                        print_all=self.print_all,
-                        total_epochs=self.total_epochs,
-                        table_max_rows=ray_results_table_max_rows,
-                        plot_metric=self.plot_metric,
-                    )
-                ]
-            elif self.print_progressbar or sys.stdout.isatty():
-                r_callbacks = [
-                    myPBarCallback(
-                        strategy=self.strategy_name,
-                        total_epochs=self.total_epochs,
-                    )
-                ]
-            else:
-                r_callbacks = None  # []
-
-            if self.ray_early_stop_enable:
-                stop_cb = ExperimentPlateauStopper(
-                    "loss",
-                    perc=self.ray_early_stop_perc,
-                    std=self.ray_early_stop_std,
-                    top=self.ray_early_stop_top,
-                    mode="min",
-                    patience=(int(self.ray_early_stop_patience * self.total_epochs)),
+                    _system_config={
+                        "prestart_worker_first_driver": True,
+                        "enable_worker_prestart": True,
+                        "num_workers_soft_limit": max(self.config_jobs // 2, 2),
+                    },
+                    configure_logging=True,
+                    logging_level="info",
+                    log_to_driver=True,
+                    logging_config=ray.LoggingConfig(encoding="TEXT", log_level="INFO"),
+                    _temp_dir=self.ray_log_dir,
                 )
-            else:
-                stop_cb = None
-
-            tuner = tune.Tuner(
-                trainable_with_resources,
-                tune_config=tune.TuneConfig(
-                    metric="loss",
-                    mode="min",
-                    search_alg=self.opt,
-                    scheduler=self.scheduler,
-                    max_concurrent_trials=self.config_jobs,
-                    reuse_actors=ray_reuse_actors,
-                    num_samples=self.total_epochs,
-                    # trial_name_creator=lambda trial: f"{self.strategy_name}_{trial.trainable_name}_{trial.trial_id}",
-                ),
-                param_space=self.hyperopter.dimensions,
-                run_config=RunConfig(
-                    # name=self.strategy_name,
-                    verbose=0,
-                    storage_path=self.ray_log_dir,
-                    stop=stop_cb,
-                    callbacks=r_callbacks,
-                    log_to_file=False,
-                ),
-            )
-
-            try:
-                results = tuner.fit()
-            except Exception as e:
-                logger.info(f"Tuner fit failed {e}")
-                if ray.is_initialized():
-                    ray.shutdown()
-                pass
-                # os.kill(os.getpid(), signal.SIGTERM)
+                mem_available_bytes = ray.available_resources().get("memory", 0)
+                mem_available_perc = (
+                    100.0 * mem_available_bytes / psutil.virtual_memory().total
+                )
+                # logging.getLogger(__name__).setLevel(logging.INFO)
+                logger.info(
+                    f"ray available memory (before tune): {(mem_available_perc):,.2f}% - {(mem_available_bytes/10**9):,.2f}GB/{(psutil.virtual_memory().total/10**9):,.2f}GB"
+                )
+    
+                if (
+                    self.print_all or self.plot_chart
+                ):  # self.print_hyperopt_results or  and sys.stdout.isatty()
+                    r_callbacks = [
+                        myLoggerCallback(
+                            strategy=self.strategy_name,
+                            print_all=self.print_all,
+                            total_epochs=self.total_epochs,
+                            table_max_rows=ray_results_table_max_rows,
+                            plot_metric=self.plot_metric,
+                        )
+                    ]
+                elif self.print_progressbar or sys.stdout.isatty():
+                    r_callbacks = [
+                        myPBarCallback(
+                            strategy=self.strategy_name,
+                            total_epochs=self.total_epochs,
+                        )
+                    ]
+                else:
+                    r_callbacks = None  # []
+    
+                if self.ray_early_stop_enable:
+                    stop_cb = ExperimentPlateauStopper(
+                        "loss",
+                        perc=self.ray_early_stop_perc,
+                        std=self.ray_early_stop_std,
+                        top=self.ray_early_stop_top,
+                        mode="min",
+                        patience=(int(self.ray_early_stop_patience * self.total_epochs)),
+                    )
+                else:
+                    stop_cb = None
+    
+                tuner = tune.Tuner(
+                    trainable_with_resources,
+                    tune_config=tune.TuneConfig(
+                        metric="loss",
+                        mode="min",
+                        search_alg=self.opt,
+                        scheduler=self.scheduler,
+                        max_concurrent_trials=self.config_jobs,
+                        reuse_actors=ray_reuse_actors,
+                        num_samples=self.total_epochs,
+                        # trial_name_creator=lambda trial: f"{self.strategy_name}_{trial.trainable_name}_{trial.trial_id}",
+                    ),
+                    param_space=self.hyperopter.dimensions,
+                    run_config=RunConfig(
+                        # name=self.strategy_name,
+                        verbose=0,
+                        storage_path=self.ray_log_dir,
+                        stop=stop_cb,
+                        callbacks=r_callbacks,
+                        log_to_file=False,
+                    ),
+                )
+    
+                try:
+                    results = tuner.fit()
+                except Exception as e:
+                    logger.info(f"Tuner fit failed {e}")
+                    if ray.is_initialized():
+                        ray.shutdown()
+                    pass
+                    # os.kill(os.getpid(), signal.SIGTERM)
 
         except KeyboardInterrupt:
             logger.info("User interrupted..")
@@ -990,7 +989,7 @@ class Hyperopt:
             # )
 
             self.current_best_epoch["params_details"] = deepcopy(
-                self._get_params_details(
+                self.hyperopter._get_params_details(
                     self.current_best_epoch["tune_best_result"].config
                 )
             )

@@ -988,7 +988,7 @@ class Hyperopt:
             # )
 
             self.current_best_epoch["params_details"] = deepcopy(
-                self._get_params_details(
+                self.hyperopter._get_params_details(
                     self.current_best_epoch["tune_best_result"].config
                 )
             )

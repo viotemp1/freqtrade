@@ -71,7 +71,7 @@ with warnings.catch_warnings():
     from ray.tune.stopper.stopper import Stopper
 
 
-ray_results_table_max_rows = -1  # -1 - half screen
+ray_results_table_max_rows = 10  # -1 - half screen
 ray_reuse_actors = False
 
 # max_used_memory = 80  # 0 or negative to deactivate, otherwise pause worker
@@ -426,7 +426,7 @@ class Hyperopt:
                     f"Ray searcher {searcher} not supported. Please use one of {searchers_list}"
                 )
         if searcher == "optuna" and searcher_param1 is None:
-            searcher_param1 = "auto_sampler"
+            searcher_param1 = "NSGAIIISampler" # NSGAIIISampler auto_sampler
         self.searcher = searcher
         self.searcher_param1 = searcher_param1
         logger.info(f"Using searcher {searcher} - {searcher_param1}")
@@ -904,6 +904,7 @@ class Hyperopt:
         self.current_best_epoch["tune_best_result"] = results.get_best_result(
             metric="loss", mode="min"
         )
+        self.current_best_epoch[FTHYPT_FILEVERSION] = 2
 
         # df_results = self.current_best_epoch["tune_best_result"].metrics_dataframe
         df_results = results.get_dataframe(filter_metric="loss", filter_mode="min")
@@ -1024,16 +1025,19 @@ class myLoggerCallback(LoggerCallback):
         total_epochs=-1,
         table_max_rows=-1,
         plot_metric="",
+        min_refresh_time=3, # seconds
     ) -> None:
 
         self.console_width = Console().width
         self.console_width_plot = self.console_width - 4
         self.console_height = Console().height
         self.decoder = AnsiDecoder()
+        self.refresh_enabled = True
 
         if table_max_rows <= 0:
             table_max_rows = self.console_height // 3
 
+        self.min_refresh_time = min_refresh_time
         self.trial_results = deque(maxlen=table_max_rows)  # []
         self.plot_trial_results = []
         # deque(maxlen=min(int(0.9*self.console_width), self.console_width-14)) #
@@ -1071,6 +1075,7 @@ class myLoggerCallback(LoggerCallback):
             self.table.add_column(col)
         self.table_master = self.generate_empty_table()
         self.refresh_chart = 100
+        self.last_refresh_time = time.time()
 
     def generate_empty_table(self) -> Table:
         return Table(
@@ -1081,23 +1086,23 @@ class myLoggerCallback(LoggerCallback):
             expand=True,
         )
 
-    def resize_list(self, list_in: [], max_len: int):
-        if len(list_in) > max_len:
-            list_out = []
-            n_averaged_elements = (len(list_in) // max_len) + 1
-            for i in range(0, len(list_in), n_averaged_elements):
-                slice_from_index = i
-                slice_to_index = slice_from_index + n_averaged_elements
-                if self.plot_metric in ["Profit", "Winrate"]:
-                    list_out.append(np.max(list_in[slice_from_index:slice_to_index]))
-                elif self.plot_metric == "loss":
-                    list_out.append(np.min(list_in[slice_from_index:slice_to_index]))
-                else:
-                    list_out.append(np.mean(list_in[slice_from_index:slice_to_index]))
-            list_out = list_out[-max_len:]
-            return list_out
-        else:
-            return list_in
+    # def resize_list(self, list_in: [], max_len: int):
+    #     if len(list_in) > max_len:
+    #         list_out = []
+    #         n_averaged_elements = (len(list_in) // max_len) + 1
+    #         for i in range(0, len(list_in), n_averaged_elements):
+    #             slice_from_index = i
+    #             slice_to_index = slice_from_index + n_averaged_elements
+    #             if self.plot_metric in ["Profit", "Winrate"]:
+    #                 list_out.append(np.max(list_in[slice_from_index:slice_to_index]))
+    #             elif self.plot_metric == "loss":
+    #                 list_out.append(np.min(list_in[slice_from_index:slice_to_index]))
+    #             else:
+    #                 list_out.append(np.mean(list_in[slice_from_index:slice_to_index]))
+    #         list_out = list_out[-max_len:]
+    #         return list_out
+    #     else:
+    #         return list_in
 
     def plot_chart_fn(self, width:int, height:int, plot_list: list, title: str=""):
         plt.clf()
@@ -1255,22 +1260,24 @@ class myLoggerCallback(LoggerCallback):
         )
         self.table_master.add_row(table_cpu)
 
-    def on_step_begin(self, iteration, trials, **info):  ## too often
-        # if self.live is None:
-        #     self.live = Live(
-        #         self.table_master,
-        #         vertical_overflow="ellipsis",
-        #         auto_refresh=False,
-        #     )  # , screen=True : crop', 'ellipsis', 'visible', , refresh_per_second=0.2, transient=True,
-        #     self.live.start(refresh=True)
+    # def on_step_begin(self, iteration, trials, **info):  ## too often
+    #     # if self.live is None:
+    #     #     self.live = Live(
+    #     #         self.table_master,
+    #     #         vertical_overflow="ellipsis",
+    #     #         auto_refresh=False,
+    #     #     )  # , screen=True : crop', 'ellipsis', 'visible', , refresh_per_second=0.2, transient=True,
+    #     #     self.live.start(refresh=True)
 
-        start_date = time.time()
-        if iteration % self.refresh_chart == 0 and self.live:
-            # self.logger.warning(f"myLoggerCallback - on_step_begin - iteration: {iteration}")
-            self.generate_table()
-            self.live.update(self.table_master, refresh=True)
-        if time.time() - start_date > 0.1:
-            self.refresh_chart = int(2 * self.refresh_chart)
+    #     if self.refresh_enabled:
+    #         start_date = time.time()
+    #         if iteration % self.refresh_chart == 0 and self.live:
+    #             # self.logger.warning(f"myLoggerCallback - on_step_begin - iteration: {iteration}")
+    #             self.generate_table()
+    #             self.live.update(self.table_master, refresh=True)
+    #         if time.time() - start_date > 0.1:
+    #             self.refresh_chart = int(2 * self.refresh_chart)
+    #         self.last_refresh_time = time.time()
 
     def on_trial_start(self, iteration, trials, trial, **info):
         if self.live is None:
@@ -1280,8 +1287,12 @@ class myLoggerCallback(LoggerCallback):
                 auto_refresh=False,
             )  # , screen=True : crop', 'ellipsis', 'visible', , refresh_per_second=0.2, transient=True,
             self.live.start(refresh=True)
-        self.generate_table()
-        self.live.update(self.table_master, refresh=True)
+            self.last_refresh_time = time.time()
+        
+        # if self.refresh_enabled:
+        #     self.generate_table()
+        #     self.live.update(self.table_master, refresh=True)
+        #     self.last_refresh_time = time.time()
 
     def append_trial_results(self, trial_id, result):
         # logger.info(f"append_trial_results result: {result}")
@@ -1324,12 +1335,19 @@ class myLoggerCallback(LoggerCallback):
         if self.plot_metric and len(self.plot_metric) > 0:
             self.plot_trial_results.append(result[self.plot_metric])
 
-        self.generate_table()
-        self.live.update(self.table_master, refresh=True)
+        if self.refresh_enabled:
+            if time.time() - self.last_refresh_time > self.min_refresh_time:
+                self.generate_table()
+                self.live.update(self.table_master, refresh=True)
+                self.last_refresh_time = time.time()
 
     def on_experiment_end(self, trials, **info):
+        self.refresh_enabled = False
         if self.live and self.live.is_started:
             self.live.stop()
+
+    def on_experiment_start(self, trials, **info):
+        self.refresh_enabled = True
 
 
 class myPBarCallback(LoggerCallback):
@@ -1488,7 +1506,13 @@ class ExperimentPlateauStopper(Stopper):
                     ) or (self.no_increase() and self._iterations_noinc >= self._patience)
         self.std_value = abs(np.std(self._top_values) / np.mean(self._top_values))
         if stop_all:
-            logger.info(
+            # logger.info(
+            #     f"ExperimentPlateauStopper - current_epoch: {self._current_epoch} / best_epoch: {self._best_epoch} / "
+            #     f"iterations_plateau: {self._iterations_plateau}/ iterations_noinc: {self._iterations_noinc} / patience: {self._patience} / "
+            #     f"has_plateaued: {self.has_plateaued()} / no_increase: {self.no_increase()} / std: {self.std_value} / "
+            #     f"last_result: {self._last_result} / best_result: {self._best_result}"
+            # )
+            print(
                 f"ExperimentPlateauStopper - current_epoch: {self._current_epoch} / best_epoch: {self._best_epoch} / "
                 f"iterations_plateau: {self._iterations_plateau}/ iterations_noinc: {self._iterations_noinc} / patience: {self._patience} / "
                 f"has_plateaued: {self.has_plateaued()} / no_increase: {self.no_increase()} / std: {self.std_value} / "

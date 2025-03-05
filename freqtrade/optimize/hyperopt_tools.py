@@ -94,6 +94,7 @@ class HyperoptTools:
 
     @staticmethod
     def try_export_params(config: Config, strategy_name: str, params: dict):
+        print(params.get(FTHYPT_FILEVERSION, 1), config.get("disableparamexport", False))
         if params.get(FTHYPT_FILEVERSION, 1) >= 2 and not config.get("disableparamexport", False):
             # Export parameters ...
             fn = HyperoptTools.get_strategy_filename(config, strategy_name)

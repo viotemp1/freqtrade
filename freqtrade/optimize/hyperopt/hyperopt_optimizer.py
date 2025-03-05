@@ -25,7 +25,6 @@ from freqtrade.data.history import get_timerange
 from freqtrade.data.metrics import calculate_market_change
 from freqtrade.enums import HyperoptState
 from freqtrade.exceptions import OperationalException
-from freqtrade.misc import deep_merge_dicts
 from freqtrade.optimize.backtesting import Backtesting
 from freqtrade.optimize.space import Categorical
 from freqtrade.optimize.space.decimalspace import SKDecimal

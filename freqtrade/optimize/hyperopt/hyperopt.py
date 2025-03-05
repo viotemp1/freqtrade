@@ -21,7 +21,7 @@ from joblib import cpu_count, dump, load
 from freqtrade.constants import FTHYPT_FILEVERSION, LAST_BT_RESULT_FN, Config
 from freqtrade.enums import HyperoptState
 from freqtrade.exceptions import OperationalException
-from freqtrade.misc import file_dump_json, plural
+from freqtrade.misc import file_dump_json, plural, deep_merge_dicts
 from freqtrade.optimize.hyperopt.hyperopt_logger import logging_mp_handle, logging_mp_setup
 from freqtrade.optimize.hyperopt.hyperopt_optimizer import HyperOptimizer
 from freqtrade.optimize.hyperopt.hyperopt_output import HyperoptOutput

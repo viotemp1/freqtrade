@@ -44,7 +44,7 @@ class IHyperOpt(ABC):
     def generate_estimator(self, dimensions: list[Dimension], **kwargs) -> EstimatorType:
         """
         Return base_estimator.
-        Can be any of 'hyperopt', 'ax', 'bayesopt', 'bohb', 'nevergrad', 'optuna', 'zoopt', 'hebo', 'variant_generator', 'random' or an instance of a class
+        Can be any of 'hyperopt', 'ax', 'bayesopt', 'bohb', 'nevergrad', 'optuna' (default), 'zoopt', 'hebo', 'variant_generator', 'random' or an instance of a class
         inheriting from RegressorMixin (from sklearn).
         """
         return "optuna"

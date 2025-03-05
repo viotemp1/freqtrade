@@ -579,13 +579,13 @@ class HyperOptimizer:
 
     @staticmethod
     def ray_setup_func():
-        try:
-            from optuna.exceptions import ExperimentalWarning
+        # try:
+        #     from optuna.exceptions import ExperimentalWarning
         
-            with warnings.catch_warnings():
-                warnings.filterwarnings("ignore", category=ExperimentalWarning)
-        except:
-            pass
+        #     with warnings.catch_warnings():
+        #         warnings.filterwarnings("ignore", category=ExperimentalWarning)
+        # except:
+        #     pass
     
         logger = logging.getLogger(__name__)
         logger.setLevel(logging.INFO)

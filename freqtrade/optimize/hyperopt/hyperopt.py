@@ -1000,9 +1000,9 @@ class Hyperopt:
                 self.current_best_epoch,
             )
 
-            HyperoptTools.show_epoch_details(
-                self.current_best_epoch, self.total_epochs, self.print_json
-            )
+            # HyperoptTools.show_epoch_details(
+            #     self.current_best_epoch, self.total_epochs, self.print_json
+            # )
 
             json_results = df_results.to_json(orient="records")
             json_results = json.loads(json_results)[0]
@@ -1058,9 +1058,9 @@ class myLoggerCallback(LoggerCallback):
             "Trial",
             "Trades",
             "Win  Draw  Loss  Win%",
-            "Avg profit",
-            "Profit",
-            "Winrate",
+            "Avg profit%",
+            "Profit Total",
+            "Winrate%",
             "Avg duration",
             "Objective",
             "Max Drawdown",
@@ -1145,27 +1145,30 @@ class myLoggerCallback(LoggerCallback):
 
         if plot_list is not None:
             for result in self.plot_trial_results:
-                if self.plot_metric == "Profit":
-                    profit = result  # [plot_metric_list.index(self.plot_metric)]
-                    try:
-                        profit = (
-                            profit.split("(")[1]
-                            .replace(")", "")
-                            .replace("%", "")
-                            .replace(",", "")
-                        )
-                        profit = float(profit)
-                        plot_list.append(profit)
-                    except:
-                        # print(result)
-                        # profit = math.nan
-                        plot_list.append(nan)
-                        pass
-                else:
-                    result = float(result)
-                    plot_list.append(
+                # if self.plot_metric == "Profit":
+                #     profit = result  # [plot_metric_list.index(self.plot_metric)]
+                #     try:
+                #         profit = (
+                #             profit.split("(")[1]
+                #             .replace(")", "")
+                #             .replace("%", "")
+                #             .replace(",", "")
+                #         )
+                #         profit = float(profit)
+                #         plot_list.append(profit)
+                #     except:
+                #         # print(result)
+                #         # profit = math.nan
+                #         plot_list.append(nan)
+                #         pass
+                # else:
+                #     result = float(result)
+                #     plot_list.append(
+                #         result
+                #     )  # [plot_metric_list.index(self.plot_metric)]
+                plot_list.append(
                         result
-                    )  # [plot_metric_list.index(self.plot_metric)]
+                    ) 
 
         # print("plot_metric", self.plot_metric, "len trial_results", len(self.trial_results),  "plot_list", plot_list)
         if plot_list and len(plot_list) > 1:
@@ -1283,7 +1286,7 @@ class myLoggerCallback(LoggerCallback):
     def append_trial_results(self, trial_id, result):
         # logger.info(f"append_trial_results result: {result}")
         loss = result["loss"]
-        if abs(loss) > 100:
+        if abs(loss) > 100 or abs(loss) < 0.001:
             loss = f"{result['loss']:,.6e}"
         else:
             loss = f"{result['loss']:,.6f}"
@@ -1293,12 +1296,12 @@ class myLoggerCallback(LoggerCallback):
                 f"{trial_id}",
                 f"{result['Trades']}",
                 f"{result['Win_Draw_Loss_Win_perc']}",
-                f"{result['Avg_profit']}",
-                f"{result['Profit']}",
+                f"{(100*result['Avg_profit']):,.4f}",
+                f"{(result['Profit']):,.2f}",
                 f"{(result['Winrate']):,.2f}",
                 f"{result['Avg_duration']}",
                 loss,
-                f"{result['Max_Drawdown_Acct']}",
+                f"{(result['Max_Drawdown_Acct']):,.2f}",
                 # f"{self.count_trials}",
                 f"{(result['time_total_s']):,.2f}",
             )

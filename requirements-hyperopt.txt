@@ -1,5 +1,6 @@
 # Include all requirements to run the bot.
 -r requirements.txt
+--extra-index-url https://download.pytorch.org/whl/cpu
 
 # Required for hyperopt
 scipy==1.15.2

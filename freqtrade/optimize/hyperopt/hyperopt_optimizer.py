@@ -14,10 +14,11 @@ import os
 from joblib import cpu_count, dump, load
 from joblib.externals import cloudpickle
 import ray
-from pandas import DataFrame
+from pandas import DataFrame, json_normalize
 from pathlib import Path
 import setproctitle
 import gc
+from tabulate import tabulate
 
 from freqtrade.constants import DATETIME_PRINT_FORMAT, Config
 from freqtrade.data.converter import trim_dataframes
@@ -37,6 +38,7 @@ from freqtrade.optimize.hyperopt_tools import HyperoptStateContainer, HyperoptTo
 from freqtrade.optimize.optimize_reports import generate_strategy_stats
 from freqtrade.resolvers.hyperopt_resolver import HyperOptLossResolver
 from freqtrade.util.dry_run_wallet import get_dry_run_wallet
+from freqtrade.optimize.optimize_reports import generate_wins_draws_losses
 
 import numpy as np
 
@@ -90,13 +92,15 @@ class HyperOptimizer:
         self.custom_hyperopt.strategy = self.backtesting.strategy
 
         self.hyperopt_pickle_magic(self.backtesting.strategy.__class__.__bases__)
-        self.custom_hyperoptloss: IHyperOptLoss = HyperOptLossResolver.load_hyperoptloss(
-            self.config
+        self.custom_hyperoptloss: IHyperOptLoss = (
+            HyperOptLossResolver.load_hyperoptloss(self.config)
         )
         self.calculate_loss = self.custom_hyperoptloss.hyperopt_loss_function
 
         self.data_pickle_file = (
-            self.config["user_data_dir"] / "hyperopt_results" / "hyperopt_tickerdata.pkl"
+            self.config["user_data_dir"]
+            / "hyperopt_results"
+            / "hyperopt_tickerdata.pkl"
         )
 
         self.market_change = 0.0
@@ -147,13 +151,18 @@ class HyperOptimizer:
         if HyperoptTools.has_space(self.config, "sell"):
             result["sell"] = {p.name: params.get(p.name) for p in self.sell_space}
         if HyperoptTools.has_space(self.config, "protection"):
-            result["protection"] = {p.name: params.get(p.name) for p in self.protection_space}
+            result["protection"] = {
+                p.name: params.get(p.name) for p in self.protection_space
+            }
         if HyperoptTools.has_space(self.config, "roi"):
             result["roi"] = {
-                str(k): v for k, v in self.custom_hyperopt.generate_roi_table(params).items()
+                str(k): v
+                for k, v in self.custom_hyperopt.generate_roi_table(params).items()
             }
         if HyperoptTools.has_space(self.config, "stoploss"):
-            result["stoploss"] = {p.name: params.get(p.name) for p in self.stoploss_space}
+            result["stoploss"] = {
+                p.name: params.get(p.name) for p in self.stoploss_space
+            }
         if HyperoptTools.has_space(self.config, "trailing"):
             result["trailing"] = self.custom_hyperopt.generate_trailing_params(params)
         if HyperoptTools.has_space(self.config, "trades"):
@@ -280,7 +289,9 @@ class HyperOptimizer:
             + self.max_open_trades_space
         )
 
-        searcher_orig = self.custom_hyperopt.generate_estimator(dimensions=self.dimensions)
+        searcher_orig = self.custom_hyperopt.generate_estimator(
+            dimensions=self.dimensions
+        )
         searcher_param1 = None
         if isinstance(searcher_orig, tuple) and len(searcher_orig) == 2:
             searcher = searcher_orig[0]
@@ -291,7 +302,7 @@ class HyperOptimizer:
             raise Exception(
                 f"generate_estimator should return either str or tuple. Got instead {searcher_orig} - {type(searcher_orig)}"
             )
-        
+
         for original_dim in dimensions:
             # print(original_dim.name, original_dim, type(original_dim))
             if type(original_dim) == Integer:  # isinstance(original_dim, Integer):
@@ -452,14 +463,15 @@ class HyperOptimizer:
     #         model_queue_size=model_queue_size,
     #     )
 
-
     def advise_and_trim(self, data: dict[str, DataFrame]) -> dict[str, DataFrame]:
         preprocessed = self.backtesting.strategy.advise_all_indicators(data)
 
         # Trim startup period from analyzed dataframe to get correct dates for output.
         # This is only used to keep track of min/max date after trimming.
         # The result is NOT returned from this method, actual trimming happens in backtesting.
-        trimmed = trim_dataframes(preprocessed, self.timerange, self.backtesting.required_startup)
+        trimmed = trim_dataframes(
+            preprocessed, self.timerange, self.backtesting.required_startup
+        )
         self.min_date, self.max_date = get_timerange(trimmed)
         if not self.market_change:
             self.market_change = calculate_market_change(trimmed, "close")
@@ -543,7 +555,9 @@ class HyperOptimizer:
         }
 
     @staticmethod
-    def assign_params(backtesting: Backtesting, params_dict: dict[str, Any], category: str) -> None:
+    def assign_params(
+        backtesting: Backtesting, params_dict: dict[str, Any], category: str
+    ) -> None:
         """
         Assign hyperoptable parameters
         """
@@ -563,14 +577,14 @@ class HyperOptimizer:
     #     # Return a dict where the keys are the names of the dimensions
     #     # and the values are taken from the list of parameters.
     #     return {d.name: v for d, v in zip(dimensions, raw_params, strict=False)}
-    
+
     @staticmethod
     def _get_params_dict(dimensions: {}, raw_params: {}) -> Dict:
         # Ensure the number of dimensions match
         # the number of parameters in the list.
         if len(raw_params) != len(dimensions):
             raise ValueError("Mismatch in number of search-space dimensions.")
-    
+
         # Return a dict where the keys are the names of the dimensions
         # and the values are taken from the list of parameters.
         # return {d.name: v for d, v in zip(dimensions, raw_params)}
@@ -580,15 +594,15 @@ class HyperOptimizer:
     def ray_setup_func():
         # try:
         #     from optuna.exceptions import ExperimentalWarning
-        
+
         #     with warnings.catch_warnings():
         #         warnings.filterwarnings("ignore", category=ExperimentalWarning)
         # except:
         #     pass
-    
+
         logger = logging.getLogger(__name__)
         logger.setLevel(logging.INFO)
-    
+
         os.environ["RAY_TQDM"] = "1"
         os.environ["RAY_PROFILING"] = "0"
         os.environ["RAY_DEDUP_LOGS"] = "0"
@@ -600,11 +614,11 @@ class HyperOptimizer:
         # os.environ["FUNCTION_SIZE_WARN_THRESHOLD"] = f"{2 * 10**7}"
         # os.environ["RAY_memory_monitor_refresh_ms"] = "0" # disable memory check
         # os.environ["RAY_memory_usage_threshold"] = "1"
-    
+
         os.environ["SPT_NOENV"] = "1"
-    
+
         return logger
-    
+
     @staticmethod
     def objective(
         config: Dict[str, Any],
@@ -628,36 +642,36 @@ class HyperOptimizer:
         Called once per epoch to optimize whatever is configured.
         Keep this function as optimized as possible!
         """
-    
+
         logger = HyperOptimizer.ray_setup_func()
         # logger.info(f"ray hyperopt objective - ray_available_resources: {ray.available_resources()}")
         mem_available = ray.available_resources().get("memory", 0)
-    
+
         # ray_current_workers = ray.util.state.list_workers(
         #     address=ray.get_runtime_context().gcs_address,
         #     filters=[("is_alive", "=", "True")],
         #     raise_on_missing_output=False,
         # )
         # logger.info(f"ray workers: {len(ray_current_workers)} - {ray_current_workers}")
-    
+
         # ray_current_tasks = ray.util.state.list_tasks(
         #     address=ray.get_runtime_context().gcs_address,
         #     filters=[("state", "!=", "FINISHED")],
         #     raise_on_missing_output=False,
         # )
         # logger.info(f"ray tasks: {len(ray_current_tasks)} - {ray_current_tasks}")
-    
+
         obj_id = ray.get_runtime_context().get_task_id()[:10]
         # logger.error(f"""worker_id: {ray.get_runtime_context().get_worker_id()} /
         #     actor_id: {ray.get_runtime_context().get_actor_id()} /
         #     job_id: {ray.get_runtime_context().get_job_id()} /
         #     task_id: {ray.get_runtime_context().get_task_id()}
         #     """)
-    
+
         strategy_name = backtesting.strategy.get_strategy_name()
         setproctitle.setproctitle(f"ray::{strategy_name}::{obj_id}")
         os.chdir(Path(config_ft["user_data_dir"]).parent.absolute())
-    
+
         # mem_used = psutil.virtual_memory().percent
         # if max_used_memory > 0 and mem_used > max_used_memory:
         #     logger.warning(f"objective paused - high memory usage {mem_used}")
@@ -666,35 +680,35 @@ class HyperOptimizer:
         #     logger.warning(
         #         f"objective resumed - memory usage {psutil.virtual_memory().percent}"
         #     )
-    
+
         # print(f"objective start - {os.getcwd()}")
         logger.debug(f"objective start - {os.getcwd()}")
         if custom_trade_info is not None:
             backtesting.strategy.custom_trade_info = custom_trade_info
-    
+
         HyperoptStateContainer.set_state(HyperoptState.OPTIMIZE)
         backtest_start_time = datetime.now(timezone.utc)
         params_dict = HyperOptimizer._get_params_dict(dimensions_ft, config)
         # logger.info(f"params_dict - {params_dict}")
-    
+
         # Apply parameters
         if HyperoptTools.has_space(config_ft, "buy"):
             HyperOptimizer.assign_params(backtesting, params_dict, "buy")
-    
+
         if HyperoptTools.has_space(config_ft, "sell"):
             HyperOptimizer.assign_params(backtesting, params_dict, "sell")
-    
+
         if HyperoptTools.has_space(config_ft, "protection"):
             HyperOptimizer.assign_params(backtesting, params_dict, "protection")
-    
+
         if HyperoptTools.has_space(config_ft, "roi"):
             backtesting.strategy.minimal_roi = custom_hyperopt_ft.generate_roi_table(
                 params_dict
             )
-    
+
         if HyperoptTools.has_space(config_ft, "stoploss"):
             backtesting.strategy.stoploss = params_dict["stoploss"]
-    
+
         if HyperoptTools.has_space(config_ft, "trailing"):
             d = custom_hyperopt_ft.generate_trailing_params(params_dict)
             backtesting.strategy.trailing_stop = d["trailing_stop"]
@@ -705,14 +719,15 @@ class HyperOptimizer:
             backtesting.strategy.trailing_only_offset_is_reached = d[
                 "trailing_only_offset_is_reached"
             ]
-    
+
         if HyperoptTools.has_space(config_ft, "trades"):
             if config_ft["stake_amount"] == "unlimited" and (
-                params_dict["max_open_trades"] == -1 or params_dict["max_open_trades"] == 0
+                params_dict["max_open_trades"] == -1
+                or params_dict["max_open_trades"] == 0
             ):
                 # Ignore unlimited max open trades if stake amount is unlimited
                 params_dict.update({"max_open_trades": config_ft["max_open_trades"]})
-    
+
             updated_max_open_trades = (
                 int(params_dict["max_open_trades"])
                 if (
@@ -721,23 +736,23 @@ class HyperOptimizer:
                 )
                 else float("inf")
             )
-    
+
             config_ft.update({"max_open_trades": updated_max_open_trades})
-    
+
             backtesting.strategy.max_open_trades = updated_max_open_trades
-    
+
         # logger.warning(f"params_dict - {params_dict}")
-    
+
         with data_pickle_file_ft.open("rb") as f:
             processed = load(f, mmap_mode="r")
             # if self.analyze_per_epoch:
             #     # Data is not yet analyzed, rerun populate_indicators.
             #     processed = self.advise_and_trim(processed)
-    
+
         if backtesting.timeframe_detail:
             with detail_data_pickle_file_ft.open("rb") as f:
                 backtesting.detail_data = load(f, mmap_mode="r")
-    
+
         bt_results = backtesting.backtest(
             processed=processed, start_date=min_date_ft, end_date=max_date_ft
         )
@@ -759,28 +774,115 @@ class HyperOptimizer:
         result["runtime_s"] = int(backtest_end_time.timestamp()) - int(
             backtest_start_time.timestamp()
         )
-    
-        ray_result_tmp = HyperoptTools.get_result_dict(
-            config_ft,
-            result,
-            total_epochs_ft,
-        )
         # print("objective result", result)
-        loss = result["loss"]
-        ray_result_tmp["loss"] = [result["loss"]]
-        ray_result_tmp["params_dict"] = [str(result["params_dict"])]
-        ray_result_tmp["profit_perc"] = [100.0 * result["total_profit"]]
-    
-        ray_result = {}
-        for key, val in ray_result_tmp.items():
-            ray_result[key] = val[0]
-    
+        # ['loss', 'params_dict', 'params_details', 'results_metrics', 'results_explanation', 'total_profit', 'runtime_s']
+        # print("objective result", list(result.keys()))
+        # ['trades', 'locks', 'best_pair', 'worst_pair', 'results_per_pair', 'results_per_enter_tag',
+        # 'exit_reason_summary', 'mix_tag_stats', 'left_open_trades', 'total_trades', 'trade_count_long',
+        # 'trade_count_short', 'total_volume', 'avg_stake_amount', 'profit_mean', 'profit_median', 'profit_total', 'profit_total_long', 'profit_total_short', 'profit_total_abs', 'profit_total_long_abs',
+        # 'profit_total_short_abs', 'cagr', 'expectancy', 'expectancy_ratio', 'sortino', 'sharpe', 'calmar', 'sqn', 'profit_factor', 'backtest_start', 'backtest_start_ts', 'backtest_end', 'backtest_end_ts', 'backtest_days',
+        # 'backtest_run_start_ts', 'backtest_run_end_ts', 'trades_per_day', 'market_change', 'pairlist', 'stake_amount', 'stake_currency', 'stake_currency_decimals', 'starting_balance', 'dry_run_wallet', 'final_balance',
+        # 'rejected_signals', 'timedout_entry_orders', 'timedout_exit_orders', 'canceled_trade_entries', 'canceled_entry_orders', 'replaced_entry_orders', 'max_open_trades', 'max_open_trades_setting', 'timeframe',
+        # 'timeframe_detail', 'timerange', 'enable_protections', 'strategy_name', 'stoploss', 'trailing_stop', 'trailing_stop_positive', 'trailing_stop_positive_offset', 'trailing_only_offset_is_reached',
+        # 'use_custom_stoploss', 'minimal_roi', 'use_exit_signal', 'exit_profit_only', 'exit_profit_offset', 'ignore_roi_if_entry_signal', 'trading_mode', 'margin_mode', 'backtest_best_day', 'backtest_worst_day',
+        # 'backtest_best_day_abs', 'backtest_worst_day_abs', 'winning_days', 'draw_days', 'losing_days', 'daily_profit', 'wins', 'losses', 'draws', 'winrate', 'holding_avg', 'holding_avg_s', 'winner_holding_avg',
+        # 'winner_holding_avg_s', 'loser_holding_avg', 'loser_holding_avg_s', 'max_consecutive_wins', 'max_consecutive_losses', 'max_drawdown_account', 'max_relative_drawdown', 'max_drawdown_abs', 'drawdown_start',
+        # 'drawdown_start_ts', 'drawdown_end', 'drawdown_end_ts', 'max_drawdown_low', 'max_drawdown_high', 'csum_min', 'csum_max']
+        # print("objective result", list(result["results_metrics"].keys()))
+
+        # print(tabulate(json_normalize(result, max_level=1), headers='keys', tablefmt='psql'))
+        # print("results_explanation", result["results_explanation"])
+
+        # , 'params_dict', 'params_details', , 'results_explanation'
+        result_columns = {
+            "loss": "Objective",
+            "total_profit": "Total_profit1",
+            "profit_total": "Total_profit",
+            "profit_mean": "Avg_profit",
+            "profit_total_abs": "Profit",
+            "runtime_s": "TTR",
+            "total_trades": "Trades",
+            "holding_avg": "Avg_duration",
+            "max_drawdown_abs": "Max_drawdown",
+            "max_drawdown_account": "Max_Drawdown_Acct",
+            "wins": "",
+            "draws": "",
+            "losses": "",
+        }
+        trial_result = {
+            "loss": result["loss"],
+            "profit_perc": 100.0 * result["results_metrics"]["profit_total"],
+        }
+        for key, value in result.items():
+            if key in list(result_columns.keys()):
+                if len(result_columns[key]) > 0:
+                    trial_result[result_columns[key]] = value
+                else:
+                    trial_result[key] = value
+            elif key == "results_metrics":
+                for key1, value1 in result["results_metrics"].items():
+                    if key1 in list(result_columns.keys()):
+                        if len(result_columns[key1]) > 0:
+                            trial_result[result_columns[key1]] = value1
+                        else:
+                            trial_result[key1] = value1
+
+        trial_result["Win_Draw_Loss_Win_perc"] = generate_wins_draws_losses(
+            trial_result["wins"],
+            trial_result["draws"],
+            trial_result["losses"],
+        )
+
+        if trial_result["wins"] > 0 and trial_result["losses"] == 0:
+            trial_result["Winrate"] = 100
+        elif trial_result["wins"] == 0:
+            trial_result["Winrate"] = 0
+        else:
+            trial_result["Winrate"] = (
+                100.0
+                / (
+                    trial_result["wins"]
+                    + trial_result["draws"]
+                    + trial_result["losses"]
+                )
+                * trial_result["wins"]
+            )
+
+        # trial_result.columns = [
+        #     "Trades",
+        #     "Win_Draw_Loss_Win_perc",
+        #     "Avg_profit",
+        #     "Total_profit",
+        #     "Profit",
+        #     "Winrate",
+        #     "Avg_duration",
+        #     "max_drawdown_account",
+        #     "max_drawdown_abs",
+        #     "Objective",
+        # ]
+        # trial_result = trial_result.to_dict(orient="list")
+        # print("objective trial_result", trial_result.keys())
+        # print("objective trial_result", trial_result)
+        # ray_result_tmp = HyperoptTools.get_result_dict(
+        #     config_ft,
+        #     result,
+        #     total_epochs_ft,
+        # )
+        # loss = result["loss"]
+        # ray_result_tmp["loss"] = [result["loss"]]
+        # ray_result_tmp["params_dict"] = [str(result["params_dict"])]
+        # ray_result_tmp["profit_perc"] = [100.0 * result["total_profit"]]
+
+        # ray_result = {}
+        # for key, val in ray_result_tmp.items():
+        #     ray_result[key] = val[0]
+
         backtesting = None
-    
+
         gc.collect()
-    
+
         # print(ray_result)
         # _save_result_ft(result, results_file_ft)
-    
+
         # train.report(ray_result)
-        return ray_result
+        return trial_result

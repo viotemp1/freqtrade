@@ -13,6 +13,7 @@ from math import ceil, nan
 from multiprocessing import Manager
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from copy import deepcopy
 
 import rapidjson
 from joblib import cpu_count, dump, load

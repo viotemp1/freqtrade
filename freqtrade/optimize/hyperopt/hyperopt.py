@@ -1,6 +1,6 @@
 # pragma pylint: disable=too-many-instance-attributes, pointless-string-statement
 
-### TO DO - dynamic resource allocation https://docs.ray.io/en/latest/tune/examples/includes/xgboost_dynamic_resources_example.html
+### TO DO - dynamic resource allocation ?https://docs.ray.io/en/latest/tune/examples/includes/xgboost_dynamic_resources_example.html
 """
 This module contains the hyperopt logic
 """

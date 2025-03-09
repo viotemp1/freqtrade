@@ -2,6 +2,7 @@
 This module contains the hyperopt optimizer class, which needs to be pickled
 and will be sent to the hyperopt worker processes.
 """
+### TO DO
 
 import logging
 import sys

@@ -353,22 +353,6 @@ def test_start_calls_optimizer(mocker, hyperopt_conf, capsys) -> None:
         "freqtrade.optimize.hyperopt.hyperopt_optimizer.get_timerange",
         MagicMock(return_value=(datetime(2017, 12, 10), datetime(2017, 12, 13))),
     )
-    # Dummy-reduce points to ensure scikit-learn is forced to generate new values
-    mocker.patch("freqtrade.optimize.hyperopt.hyperopt.INITIAL_POINTS", 2)
-
-    parallel = mocker.patch(
-        "freqtrade.optimize.hyperopt.Hyperopt.run_optimizer_parallel",
-        MagicMock(
-            return_value=[
-                {
-                    "loss": 1,
-                    "results_explanation": "foo result",
-                    "params": {"buy": {}, "sell": {}, "roi": {}, "stoploss": 0.0},
-                    "results_metrics": generate_result_metrics(),
-                }
-            ]
-        ),
-    )
     patch_exchange(mocker)
     # Co-test loading timeframe from strategy
     del hyperopt_conf["timeframe"]
@@ -378,8 +362,6 @@ def test_start_calls_optimizer(mocker, hyperopt_conf, capsys) -> None:
     hyperopt.hyperopter.custom_hyperopt.generate_roi_table = MagicMock(return_value={})
 
     hyperopt.start()
-
-    parallel.assert_called_once()
 
     out, _err = capsys.readouterr()
     assert "Best result:\n\n*    1/1: foo result Objective: 1.00000\n" in out
@@ -1050,8 +1032,6 @@ def test_simplified_interface_failed(mocker, hyperopt_conf, space) -> None:
 def test_in_strategy_auto_hyperopt(mocker, hyperopt_conf, tmp_path, fee) -> None:
     patch_exchange(mocker)
     mocker.patch(f"{EXMS}.get_fee", fee)
-    # Dummy-reduce points to ensure scikit-learn is forced to generate new values
-    mocker.patch("freqtrade.optimize.hyperopt.hyperopt.INITIAL_POINTS", 2)
     (tmp_path / "hyperopt_results").mkdir(parents=True)
     # No hyperopt needed
     hyperopt_conf.update(
@@ -1099,8 +1079,6 @@ def test_in_strategy_auto_hyperopt_with_parallel(mocker, hyperopt_conf, tmp_path
     mocker.patch(f"{EXMS}.reload_markets")
     mocker.patch(f"{EXMS}.markets", PropertyMock(return_value=get_markets()))
     (tmp_path / "hyperopt_results").mkdir(parents=True)
-    # Dummy-reduce points to ensure scikit-learn is forced to generate new values
-    mocker.patch("freqtrade.optimize.hyperopt.hyperopt.INITIAL_POINTS", 2)
     # No hyperopt needed
     hyperopt_conf.update(
         {

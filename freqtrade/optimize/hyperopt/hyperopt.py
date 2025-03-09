@@ -1,5 +1,6 @@
 # pragma pylint: disable=too-many-instance-attributes, pointless-string-statement
 
+### TO DO - dynamic resource allocation https://docs.ray.io/en/latest/tune/examples/includes/xgboost_dynamic_resources_example.html
 """
 This module contains the hyperopt logic
 """
@@ -23,7 +24,10 @@ from freqtrade.constants import FTHYPT_FILEVERSION, LAST_BT_RESULT_FN, Config
 from freqtrade.enums import HyperoptState
 from freqtrade.exceptions import OperationalException
 from freqtrade.misc import file_dump_json, plural, deep_merge_dicts
-from freqtrade.optimize.hyperopt.hyperopt_logger import logging_mp_handle, logging_mp_setup
+from freqtrade.optimize.hyperopt.hyperopt_logger import (
+    logging_mp_handle,
+    logging_mp_setup,
+)
 from freqtrade.optimize.hyperopt.hyperopt_optimizer import HyperOptimizer
 from freqtrade.optimize.hyperopt.hyperopt_output import HyperoptOutput
 from freqtrade.optimize.hyperopt_tools import (
@@ -51,6 +55,7 @@ from rich.bar import Bar
 from rich.text import Text
 from rich.style import Style
 from rich.ansi import AnsiDecoder
+
 # import asciichartpy as acp
 import plotext as plt
 from progressbar import ProgressBar
@@ -59,16 +64,24 @@ from optuna.exceptions import ExperimentalWarning
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=FutureWarning)
     warnings.filterwarnings("ignore", category=ExperimentalWarning)
+    warnings.filterwarnings("ignore", module="ray.tune.logger.tensorboardx")
+    warnings.filterwarnings("ignore", module="ray.tune.callback")
+    warnings.filterwarnings("ignore", module="ray.tune.execution.tune_controller")
+    logging.getLogger("ray.tune.schedulers.resource_changing_scheduler").setLevel(
+        logging.WARNING
+    )
 
     from skopt import Optimizer
     from skopt.space import Dimension
     import ray
     from ray import tune, train
     from ray.train import RunConfig
-    from ray.tune.search import ConcurrencyLimiter
     from ray.util.state import summarize_tasks
-    from ray.tune.logger import LoggerCallback
+    from ray.tune.experiment import Trial
+    from ray.tune.logger import LoggerCallback, CSVLoggerCallback, JsonLoggerCallback
     from ray.tune.stopper.stopper import Stopper
+    from ray.tune.execution.placement_groups import PlacementGroupFactory
+    from ray.tune.schedulers import ResourceChangingScheduler
 
 
 ray_results_table_max_rows = 10  # -1 - half screen
@@ -111,6 +124,7 @@ logger = logging.getLogger(__name__)
 
 logger = HyperOptimizer.ray_setup_func()
 
+
 class Hyperopt:
     """
     Hyperopt class, this class contains all the logic to run a hyperopt simulation
@@ -142,14 +156,10 @@ class Hyperopt:
             / "hyperopt_results"
             / f"strategy_{strategy}_{time_now}.fthypt"
         )
-        self.data_pickle_file = (
-            self.config["user_data_dir"] / "hyperopt_results" / "hyperopt_tickerdata.pkl"
-        )
-        self.detail_data_pickle_file = (
-            self.config["user_data_dir"]
-            / "hyperopt_results"
-            / "hyperopt_detail_tickerdata.json"
-        )
+
+        self.data_pickle_file = f'{self.config["user_data_dir"]}/hyperopt_results/hyperopt_tickerdata.pkl'
+        self.detail_data_pickle_file = f'{self.config["user_data_dir"]}/hyperopt_results/hyperopt_detail_tickerdata.pkl'
+
         self.hyperopt_results_file: Path = (
             Path(self.config["user_data_dir"]).parent / "csv" / "hyperopt_results.csv"
         )
@@ -226,7 +236,9 @@ class Hyperopt:
         self.hyperopter = HyperOptimizer(self.config)
 
         if hasattr(self.hyperopter.backtesting.strategy, "plot_metric"):
-            self.plot_metric = getattr(self.hyperopter.backtesting.strategy, "plot_metric")
+            self.plot_metric = getattr(
+                self.hyperopter.backtesting.strategy, "plot_metric"
+            )
         else:
             self.plot_metric = self.config.get(
                 "plot_metric", "Profit"
@@ -237,7 +249,7 @@ class Hyperopt:
         warnings.simplefilter("always")
         np.random.seed(self.hyperopter.random_state)
         random.seed(self.hyperopter.random_state)
-    
+
     @staticmethod
     def get_lock_filename(config: Config) -> str:
         return str(config["user_data_dir"] / "hyperopt.lock")
@@ -246,7 +258,7 @@ class Hyperopt:
         """
         Remove hyperopt pickle files to restart hyperopt.
         """
-        for f in [self.data_pickle_file, self.results_file]:
+        for f in [self.results_file, self.data_pickle_file, self.detail_data_pickle_file]:
             p = Path(f)
             if p.is_file():
                 logger.info(f"Removing `{p}`.")
@@ -276,7 +288,9 @@ class Hyperopt:
         )
         # Store hyperopt filename
         latest_filename = Path.joinpath(self.results_file.parent, LAST_BT_RESULT_FN)
-        file_dump_json(latest_filename, {"latest_hyperopt": str(self.results_file.name)}, log=False)
+        file_dump_json(
+            latest_filename, {"latest_hyperopt": str(self.results_file.name)}, log=False
+        )
 
     def print_results(self, results: dict[str, Any]) -> None:
         """
@@ -293,110 +307,17 @@ class Hyperopt:
                 self.print_all,
             )
 
-    # def run_optimizer_parallel(self, parallel: Parallel, asked: list[list]) -> list[dict[str, Any]]:
-    #     """Start optimizer in a parallel way"""
-
-    #     def optimizer_wrapper(*args, **kwargs):
-    #         # global log queue. This must happen in the file that initializes Parallel
-    #         logging_mp_setup(
-    #             log_queue, logging.INFO if self.config["verbosity"] < 1 else logging.DEBUG
-    #         )
-
-    #         return self.hyperopter.generate_optimizer(*args, **kwargs)
-
-    #     return parallel(delayed(wrap_non_picklable_objects(optimizer_wrapper))(v) for v in asked)
-
     def _set_random_state(self, random_state: int | None) -> int:
         return random_state or random.randint(1, 2**16 - 1)  # noqa: S311
-
-    # def get_asked_points(self, n_points: int) -> tuple[list[list[Any]], list[bool]]:
-    #     """
-    #     Enforce points returned from `self.opt.ask` have not been already evaluated
-
-    #     Steps:
-    #     1. Try to get points using `self.opt.ask` first
-    #     2. Discard the points that have already been evaluated
-    #     3. Retry using `self.opt.ask` up to 3 times
-    #     4. If still some points are missing in respect to `n_points`, random sample some points
-    #     5. Repeat until at least `n_points` points in the `asked_non_tried` list
-    #     6. Return a list with length truncated at `n_points`
-    #     """
-
-    #     def unique_list(a_list):
-    #         new_list = []
-    #         for item in a_list:
-    #             if item not in new_list:
-    #                 new_list.append(item)
-    #         return new_list
-
-    #     i = 0
-    #     asked_non_tried: list[list[Any]] = []
-    #     is_random_non_tried: list[bool] = []
-    #     while i < 5 and len(asked_non_tried) < n_points:
-    #         if i < 3:
-    #             self.opt.cache_ = {}
-    #             asked = unique_list(self.opt.ask(n_points=n_points * 5 if i > 0 else n_points))
-    #             is_random = [False for _ in range(len(asked))]
-    #         else:
-    #             asked = unique_list(self.opt.space.rvs(n_samples=n_points * 5))
-    #             is_random = [True for _ in range(len(asked))]
-    #         is_random_non_tried += [
-    #             rand
-    #             for x, rand in zip(asked, is_random, strict=False)
-    #             if x not in self.opt.Xi and x not in asked_non_tried
-    #         ]
-    #         asked_non_tried += [
-    #             x for x in asked if x not in self.opt.Xi and x not in asked_non_tried
-    #         ]
-    #         i += 1
-
-    #     if asked_non_tried:
-    #         return (
-    #             asked_non_tried[: min(len(asked_non_tried), n_points)],
-    #             is_random_non_tried[: min(len(asked_non_tried), n_points)],
-    #         )
-    #     else:
-    #         return self.opt.ask(n_points=n_points), [False for _ in range(n_points)]
-
-    # def evaluate_result(self, val: dict[str, Any], current: int, is_random: bool):
-    #     """
-    #     Evaluate results returned from generate_optimizer
-    #     """
-    #     val["current_epoch"] = current
-    #     val["is_initial_point"] = current <= INITIAL_POINTS
-
-    #     logger.debug("Optimizer epoch evaluated: %s", val)
-
-    #     is_best = HyperoptTools.is_best_loss(val, self.current_best_loss)
-    #     # This value is assigned here and not in the optimization method
-    #     # to keep proper order in the list of results. That's because
-    #     # evaluations can take different time. Here they are aligned in the
-    #     # order they will be shown to the user.
-    #     val["is_best"] = is_best
-    #     val["is_random"] = is_random
-    #     self.print_results(val)
-
-    #     if is_best:
-    #         self.current_best_loss = val["loss"]
-    #         self.current_best_epoch = val
-
-    #     self._save_result(val)
-
-    # def _setup_logging_mp_workaround(self) -> None:
-    #     """
-    #     Workaround for logging in child processes.
-    #     local_queue must be a global in the file that initializes Parallel.
-    #     """
-    #     global log_queue
-    #     m = Manager()
-    #     log_queue = m.Queue()
 
     # searchers: ['variant_generator', 'random', 'hyperopt', 'bohb', 'nevergrad', 'optuna', 'zoopt', 'hebo']
     # 'bayesopt' - not suported - does not suport Integer
     # 'ax' - not working
-    # schedulers: ['fifo', 'async_hyperband', 'asynchyperband', 'median_stopping_rule', 'medianstopping', 'hyperband', 'hb_bohb', 'pbt', 'pbt_replay', 'pb2', 'resource_changing']    
+    # schedulers: ['fifo', 'async_hyperband', 'asynchyperband', 'median_stopping_rule', 'medianstopping', 'hyperband', 'hb_bohb', 'pbt', 'pbt_replay', 'pb2', 'resource_changing']
     def get_search_algo_scheduler(self, config_jobs: Dict, random_state: int):
-        searcher_orig = self.hyperopter.custom_hyperopt.generate_estimator(dimensions=self.hyperopter.dimensions)
+        searcher_orig = self.hyperopter.custom_hyperopt.generate_estimator(
+            dimensions=self.hyperopter.dimensions
+        )
         searcher_param1 = None
         if isinstance(searcher_orig, tuple) and len(searcher_orig) == 2:
             searcher = searcher_orig[0]
@@ -426,7 +347,7 @@ class Hyperopt:
                     f"Ray searcher {searcher} not supported. Please use one of {searchers_list}"
                 )
         if searcher == "optuna" and searcher_param1 is None:
-            searcher_param1 = "NSGAIIISampler" # NSGAIIISampler auto_sampler
+            searcher_param1 = "NSGAIIISampler"  # NSGAIIISampler auto_sampler
         self.searcher = searcher
         self.searcher_param1 = searcher_param1
         logger.info(f"Using searcher {searcher} - {searcher_param1}")
@@ -538,17 +459,13 @@ class Hyperopt:
                             seed=random_state
                         )
                     elif self.searcher_param1 == "GPSampler":
-                        optuna__sampler = optuna.samplers.GPSampler(
-                            seed=random_state
-                        )
+                        optuna__sampler = optuna.samplers.GPSampler(seed=random_state)
                     elif self.searcher_param1 == "NSGAIISampler":
                         optuna__sampler = optuna.samplers.NSGAIISampler(
                             seed=random_state
                         )
                     elif self.searcher_param1 == "TPESampler":
-                        optuna__sampler = optuna.samplers.TPESampler(
-                            seed=random_state
-                        )
+                        optuna__sampler = optuna.samplers.TPESampler(seed=random_state)
                     elif self.searcher_param1 == "QMCSampler":
                         optuna__sampler = optuna.samplers.QMCSampler(
                             seed=random_state,
@@ -559,9 +476,7 @@ class Hyperopt:
                             seed=random_state
                         )
                     else:  # default
-                        optuna__sampler = optuna.samplers.TPESampler(
-                            seed=random_state
-                        )
+                        optuna__sampler = optuna.samplers.TPESampler(seed=random_state)
                     searcher_algo = tune.create_searcher(
                         searcher,
                         sampler=optuna__sampler,
@@ -596,9 +511,6 @@ class Hyperopt:
                     searcher, random_state_seed=random_state
                 )
         except Exception as e:
-            # searcher = ConcurrencyLimiter(
-            #     tune.create_searcher(searcher), max_concurrent=config_jobs
-            # )
             logger.warning(f"Set searcher error: {repr(e)}")
             searcher_algo = tune.create_searcher(searcher)
             pass
@@ -610,96 +522,96 @@ class Hyperopt:
         # self.scheduler = scheduler
         return searcher_algo, scheduler
 
+    @staticmethod
+    def resources_allocation_fn(
+        tune_controller: "TuneController",
+        trial: Trial,
+        result: Dict[str, Any],
+        scheduler: "ResourceChangingScheduler",
+    ) -> Optional[PlacementGroupFactory]:
+        """This is a basic example of a resource allocating function.
+
+        The function naively balances available CPUs over live trials.
+
+        This function returns a new ``PlacementGroupFactory`` with updated
+        resource requirements, or None. If the returned
+        ``PlacementGroupFactory`` is equal by value to the one the
+        trial has currently, the scheduler will skip the update process
+        internally (same with None).
+
+        See :class:`DistributeResources` for a more complex,
+        robust approach.
+
+        Args:
+            tune_controller: Trial runner for this Tune run.
+                Can be used to obtain information about other trials.
+            trial: The trial to allocate new resources to.
+            result: The latest results of trial.
+            scheduler: The scheduler calling the function.
+        """
+
+        # Get base trial resources as defined in
+        # ``tune.with_resources``
+        base_trial_resource = scheduler._base_trial_resources
+
+        # Don't bother if this is just the first iteration
+        if result["training_iteration"] < 1:
+            return None
+
+        if base_trial_resource is None:
+            return None
+
+        # Assume that the number of CPUs cannot go below what was
+        # specified in ``Tuner.fit()``.
+        existing_required_cpus = base_trial_resource.required_resources.get("CPU", 0)
+        if existing_required_cpus == 0:
+            return None
+
+        # Get the number of CPUs available in total (not just free)
+        total_available_cpus = tune_controller._resource_updater.get_num_cpus()
+        count_live_trials = len(tune_controller.get_live_trials())
+        memory_usage_perc = psutil.virtual_memory().percent
+        if memory_usage_perc < 80:
+            cpu_to_use = max(1, existing_required_cpus - 2)
+            logger.info(
+                f"resources_allocation_fn - existing_required_cpus: {existing_required_cpus} / cpu_to_use: {cpu_to_use} / total_available_cpus: {total_available_cpus} / count_live_trials: {count_live_trials} / memory_usage_perc: {memory_usage_perc}"
+            )
+        else:
+            cpu_to_use = existing_required_cpus
+
+        # Assign new CPUs to the trial in a PlacementGroupFactory
+        return PlacementGroupFactory([{"CPU": cpu_to_use}])  # , "GPU": 0
+
     def start(self) -> None:
-        self.random_state = self._set_random_state(self.config.get("hyperopt_random_state"))
+        results = None
+        self.random_state = self._set_random_state(
+            self.config.get("hyperopt_random_state")
+        )
         logger.info(f"Using optimizer random state: {self.random_state}")
         self.hyperopt_table_header = -1
-        self.hyperopter.prepare_hyperopt()
+        self.hyperopter.prepare_hyperopt(self.data_pickle_file, self.detail_data_pickle_file)
 
         cpus = cpu_count()
         logger.info(f"Found {cpus} CPU cores. Let's make them scream!")
-        config_jobs = self.config.get("hyperopt_jobs", -1)
-        logger.info(f"Number of parallel jobs set as: {config_jobs}")
+        logger.info(f"Number of parallel jobs set as: {self.config_jobs}")
 
         not_optimized = self.hyperopter.backtesting.strategy.get_no_optimize_params()
-        not_optimized = deep_merge_dicts(not_optimized, self.hyperopter._get_no_optimize_details())
-        
+        not_optimized = deep_merge_dicts(
+            not_optimized, self.hyperopter._get_no_optimize_details()
+        )
+
         # Searcher
         with warnings.catch_warnings():
-            warnings.filterwarnings(
-                action="ignore", category=ExperimentalWarning
+            warnings.filterwarnings(action="ignore", category=ExperimentalWarning)
+            self.opt, self.scheduler = self.get_search_algo_scheduler(
+                self.config_jobs, self.random_state
             )
-            self.opt, self.scheduler = self.get_search_algo_scheduler(config_jobs, self.random_state)
-        
-        # self._setup_logging_mp_workaround()
-        # try:
-        #     with Parallel(n_jobs=config_jobs) as parallel:
-        #         jobs = parallel._effective_n_jobs()
-        #         logger.info(f"Effective number of parallel workers used: {jobs}")
 
-        #         # Define progressbar
-        #         with get_progress_tracker(cust_callables=[self._hyper_out]) as pbar:
-        #             task = pbar.add_task("Epochs", total=self.total_epochs)
-
-        #             start = 0
-
-        #             if self.analyze_per_epoch:
-        #                 # First analysis not in parallel mode when using --analyze-per-epoch.
-        #                 # This allows dataprovider to load it's informative cache.
-        #                 asked, is_random = self.get_asked_points(n_points=1)
-        #                 f_val0 = self.hyperopter.generate_optimizer(asked[0])
-        #                 self.opt.tell(asked, [f_val0["loss"]])
-        #                 self.evaluate_result(f_val0, 1, is_random[0])
-        #                 pbar.update(task, advance=1)
-        #                 start += 1
-
-        #             evals = ceil((self.total_epochs - start) / jobs)
-        #             for i in range(evals):
-        #                 # Correct the number of epochs to be processed for the last
-        #                 # iteration (should not exceed self.total_epochs in total)
-        #                 n_rest = (i + 1) * jobs - (self.total_epochs - start)
-        #                 current_jobs = jobs - n_rest if n_rest > 0 else jobs
-
-        #                 asked, is_random = self.get_asked_points(n_points=current_jobs)
-        #                 f_val = self.run_optimizer_parallel(parallel, asked)
-        #                 self.opt.tell(asked, [v["loss"] for v in f_val])
-
-        #                 for j, val in enumerate(f_val):
-        #                     # Use human-friendly indexes here (starting from 1)
-        #                     current = i * jobs + j + 1 + start
-
-        #                     self.evaluate_result(val, current, is_random[j])
-        #                     pbar.update(task, advance=1)
-        #                 logging_mp_handle(log_queue)
-
-        # except KeyboardInterrupt:
-        #     print("User interrupted..")
-
-        # logger.info(
-        #     f"{self.num_epochs_saved} {plural(self.num_epochs_saved, 'epoch')} "
-        #     f"saved to '{self.results_file}'."
+        # self.scheduler = ResourceChangingScheduler(
+        #     base_scheduler=scheduler,
+        #     resources_allocation_function=self.resources_allocation_fn,
         # )
 
-        # if self.current_best_epoch:
-        #     HyperoptTools.try_export_params(
-        #         self.config,
-        #         self.hyperopter.get_strategy_name(),
-        #         self.current_best_epoch,
-        #     )
-
-        #     HyperoptTools.show_epoch_details(
-        #         self.current_best_epoch, self.total_epochs, self.print_json
-        #     )
-        # elif self.num_epochs_saved > 0:
-        #     print(
-        #         f"No good result found for given optimization function in {self.num_epochs_saved} "
-        #         f"{plural(self.num_epochs_saved, 'epoch')}."
-        #     )
-        # else:
-        #     # This is printed when Ctrl+C is pressed quickly, before first epochs have
-        #     # a chance to be evaluated.
-        #     print("No epochs evaluated yet, no best result.")
-        
         HyperOptimizer.ray_setup_func()
 
         try:
@@ -709,17 +621,17 @@ class Hyperopt:
             # Path("./logs").mkdir(parents=True, exist_ok=True)
 
             with warnings.catch_warnings():
-                warnings.filterwarnings(
-                    action="ignore", category=ExperimentalWarning
-                )
-            
+                warnings.filterwarnings(action="ignore", category=ExperimentalWarning)
+
                 trainable_with_parameters = tune.with_parameters(
                     HyperOptimizer.objective,
                     config_ft=self.config,
                     backtesting=self.hyperopter.backtesting,
                     custom_trade_info=(
                         self.hyperopter.backtesting.strategy.custom_trade_info
-                        if hasattr(self.hyperopter.backtesting.strategy, "custom_trade_info")
+                        if hasattr(
+                            self.hyperopter.backtesting.strategy, "custom_trade_info"
+                        )
                         else None
                     ),
                     dimensions_ft=self.hyperopter.dimensions,
@@ -729,22 +641,22 @@ class Hyperopt:
                     max_date_ft=self.hyperopter.max_date,
                     total_epochs_ft=self.total_epochs,
                     custom_hyperopt_ft=self.hyperopter.custom_hyperopt,
+                    advise_and_trim_ft=self.hyperopter.advise_and_trim,
                     _get_results_dict_ft=self.hyperopter._get_results_dict,
                     # _save_result_ft=self._save_result,
                     results_file_ft=self.results_file,
-                    max_memory_per_worker=self.ray_max_memory // self.config_jobs,
                 )
                 if self.ray_max_memory is None:
                     trainable_with_resources = tune.with_resources(
                         trainable_with_parameters, {"CPU": cpus // self.config_jobs}
                     )
-                    logger.debug(
+                    logger.info(
                         f"ray resources per worker: CPU: {cpus // self.config_jobs}/{cpus}"
                     )
                 else:
                     trainable_with_resources = tune.with_resources(
                         trainable_with_parameters,
-                        tune.PlacementGroupFactory(
+                        PlacementGroupFactory(
                             [
                                 {
                                     "CPU": 0.95 * cpus // self.config_jobs,
@@ -752,18 +664,16 @@ class Hyperopt:
                                 }
                             ]
                         ),
-                        # {
-                        #     "cpu": cpus // self.config_jobs,
-                        #     "memory": self.ray_max_memory // self.config_jobs,
-                        # },
                     )
-                    logger.debug(
-                        f"ray resources per worker: CPU: {cpus // self.config_jobs}/{cpus} - MEM: {(self.ray_max_memory / self.config_jobs):,.2f}/{(self.ray_max_memory):,.2f}"
+                    logger.info(
+                        f"ray resources per worker: CPU: {0.95 * cpus // self.config_jobs}/{cpus} - MEM: {( 0.95 * self.ray_max_memory / self.config_jobs):,.2f}/{(self.ray_max_memory):,.2f}"
                     )
                 ray.init(
                     ignore_reinit_error=True,
                     include_dashboard=self.ray_dashboard,
-                    dashboard_port=find_first_free_port(self.ray_dashboard_port),  # None
+                    dashboard_port=find_first_free_port(
+                        self.ray_dashboard_port
+                    ),  # None
                     _node_ip_address="127.0.0.1",  # 127.0.0.1 0.0.0.0 socket.gethostbyname(socket.gethostname())
                     _memory=self.ray_max_memory,
                     object_store_memory=min(
@@ -798,29 +708,37 @@ class Hyperopt:
                 logger.info(
                     f"ray available memory (before tune): {(mem_available_perc):,.2f}% - {(mem_available_bytes/10**9):,.2f}GB/{(psutil.virtual_memory().total/10**9):,.2f}GB"
                 )
-    
+
+                logging.getLogger("ray.tune.schedulers.resource_changing_scheduler").setLevel(
+                    logging.WARNING
+                )
+
                 if (
                     self.print_all or self.plot_chart
                 ):  # self.print_hyperopt_results or  and sys.stdout.isatty()
                     r_callbacks = [
+                        CSVLoggerCallback(),
+                        JsonLoggerCallback(),
                         myLoggerCallback(
                             strategy=self.strategy_name,
                             print_all=self.print_all,
                             total_epochs=self.total_epochs,
                             table_max_rows=ray_results_table_max_rows,
                             plot_metric=self.plot_metric,
-                        )
+                        ),
                     ]
                 elif self.print_progressbar or sys.stdout.isatty():
                     r_callbacks = [
+                        CSVLoggerCallback(),
+                        JsonLoggerCallback(),
                         myPBarCallback(
                             strategy=self.strategy_name,
                             total_epochs=self.total_epochs,
-                        )
+                        ),
                     ]
                 else:
-                    r_callbacks = None  # []
-    
+                    r_callbacks = [CSVLoggerCallback(), JsonLoggerCallback()]
+
                 if self.ray_early_stop_enable:
                     stop_cb = ExperimentPlateauStopper(
                         "loss",
@@ -828,11 +746,13 @@ class Hyperopt:
                         std=self.ray_early_stop_std,
                         top=self.ray_early_stop_top,
                         mode="min",
-                        patience=(int(self.ray_early_stop_patience * self.total_epochs)),
+                        patience=(
+                            int(self.ray_early_stop_patience * self.total_epochs)
+                        ),
                     )
                 else:
                     stop_cb = None
-    
+
                 tuner = tune.Tuner(
                     trainable_with_resources,
                     tune_config=tune.TuneConfig(
@@ -840,7 +760,7 @@ class Hyperopt:
                         mode="min",
                         search_alg=self.opt,
                         scheduler=self.scheduler,
-                        max_concurrent_trials=self.config_jobs,
+                        # max_concurrent_trials=0,  # self.config_jobs,
                         reuse_actors=ray_reuse_actors,
                         num_samples=self.total_epochs,
                         # trial_name_creator=lambda trial: f"{self.strategy_name}_{trial.trainable_name}_{trial.trial_id}",
@@ -855,7 +775,7 @@ class Hyperopt:
                         log_to_file=False,
                     ),
                 )
-    
+
                 try:
                     results = tuner.fit()
                 except Exception as e:
@@ -893,123 +813,124 @@ class Hyperopt:
             logger.info(
                 f"Hyperopt finished - OK: {results.num_terminated} / Failed: {results.num_errors}"
             )
-        else:
-            logger.error(
-                f"Hyperopt error - no results - {results}"
+            if self.current_best_epoch is None:
+                self.current_best_epoch = {}
+            self.current_best_epoch["tune_best_result"] = results.get_best_result(
+                metric="loss", mode="min"
             )
-            
+            self.current_best_epoch[FTHYPT_FILEVERSION] = 2
 
-        if self.current_best_epoch is None:
-            self.current_best_epoch = {}
-        self.current_best_epoch["tune_best_result"] = results.get_best_result(
-            metric="loss", mode="min"
-        )
-        self.current_best_epoch[FTHYPT_FILEVERSION] = 2
-
-        # df_results = self.current_best_epoch["tune_best_result"].metrics_dataframe
-        df_results = results.get_dataframe(filter_metric="loss", filter_mode="min")
-        # print(df_results.columns)
-        df_results = df_results.sort_values(by="loss", ascending=True).head(1)
-        df_results["training_iteration"] = df_results.index
-        df_results["strategy_name"] = self.strategy_name
-        df_results["hyperoptloss_name"] = self.config.get("hyperopt_loss")
-        first_columns = [
-            "strategy_name",
-            "hyperoptloss_name",
-            "profit_perc",
-            "Winrate",
-            "Trades",
-        ]
-        cols = first_columns + [c for c in df_results.columns if c not in first_columns]
-        df_results = df_results[cols]
-
-        if self.save_results_to_csv and len(df_results) > 0:
-            if not Path(self.hyperopt_results_file).is_file():
-                df_results.to_csv(
-                    self.hyperopt_results_file,
-                    encoding="utf-8",
-                    index=False,
-                )
-            else:
-                pd.concat(
-                    [pd.read_csv(self.hyperopt_results_file), df_results],
-                    axis=0,
-                    ignore_index=True,
-                ).to_csv(
-                    self.hyperopt_results_file,
-                    header=True,
-                    index=False,
-                    encoding="utf-8",
-                )
-                # df_results.to_csv(
-                #     self.hyperopt_results_file,
-                #     encoding="utf-8",
-                #     index=False,
-                #     mode="a",
-                #     header=False,
-                # )
-
-        df_results = df_results[
-            [
-                "training_iteration",
-                "Trades",
-                "Win_Draw_Loss_Win_perc",
-                "Avg_profit",
-                "Profit",
+            # df_results = self.current_best_epoch["tune_best_result"].metrics_dataframe
+            df_results = results.get_dataframe(filter_metric="loss", filter_mode="min")
+            # print(df_results.columns)
+            df_results = df_results.sort_values(by="loss", ascending=True).head(1)
+            df_results["training_iteration"] = df_results.index
+            df_results["strategy_name"] = self.strategy_name
+            df_results["hyperoptloss_name"] = self.config.get("hyperopt_loss")
+            first_columns = [
+                "strategy_name",
+                "hyperoptloss_name",
                 "profit_perc",
                 "Winrate",
-                "Avg_duration",
-                "Objective",
-                "loss",
-                "Max_Drawdown_Acct",
-                # "trial_id",
-                # "done",
-                # "date",
-                "time_total_s",
+                "Trades",
             ]
-        ]
-        df_results = df_results.rename(
-            columns={
-                "training_iteration": "Epoch",
-                "Win_Draw_Loss_Win_perc": "Win  Draw  Loss  Win%",
-                "Max_Drawdown_Acct": "Max Drawdown (Acct)",
-                "time_total_s": "Time to run",
-            }
-        )
+            cols = first_columns + [
+                c for c in df_results.columns if c not in first_columns
+            ]
+            df_results = df_results[cols]
 
-        if len(results) > 0:
-            logger.info(
-                f"Best results:\n"
-                f'{tabulate(df_results, headers="keys", tablefmt="psql", showindex=False)}'  #
+            if self.save_results_to_csv and len(df_results) > 0:
+                if not Path(self.hyperopt_results_file).is_file():
+                    df_results.to_csv(
+                        self.hyperopt_results_file,
+                        encoding="utf-8",
+                        index=False,
+                    )
+                else:
+                    pd.concat(
+                        [pd.read_csv(self.hyperopt_results_file), df_results],
+                        axis=0,
+                        ignore_index=True,
+                    ).to_csv(
+                        self.hyperopt_results_file,
+                        header=True,
+                        index=False,
+                        encoding="utf-8",
+                    )
+                    # df_results.to_csv(
+                    #     self.hyperopt_results_file,
+                    #     encoding="utf-8",
+                    #     index=False,
+                    #     mode="a",
+                    #     header=False,
+                    # )
+
+            df_results = df_results[
+                [
+                    "training_iteration",
+                    "Trades",
+                    "Win_Draw_Loss_Win_perc",
+                    "Avg_profit",
+                    "Profit",
+                    "profit_perc",
+                    "Winrate",
+                    "Avg_duration",
+                    "Objective",
+                    "loss",
+                    "Max_Drawdown_Acct",
+                    # "trial_id",
+                    # "done",
+                    # "date",
+                    "time_total_s",
+                ]
+            ]
+            df_results = df_results.rename(
+                columns={
+                    "training_iteration": "Epoch",
+                    "Win_Draw_Loss_Win_perc": "Win  Draw  Loss  Win%",
+                    "Max_Drawdown_Acct": "Max Drawdown (Acct)",
+                    "time_total_s": "Time to run",
+                }
             )
-            # self.current_best_epoch.config
-            # logger.info(
-            #     f"Best params:\n"
-            #     f"{json.dumps(self._get_params_details(self.current_best_epoch['tune_best_result'].config), sort_keys=False, indent=4)}"
-            # )
 
-            self.current_best_epoch["params_details"] = deepcopy(
-                self.hyperopter._get_params_details(
-                    self.current_best_epoch["tune_best_result"].config
+            if len(results) > 0:
+                logger.info(
+                    f"Best results:\n"
+                    f'{tabulate(df_results, headers="keys", tablefmt="psql", showindex=False)}'  #
                 )
-            )
-            self.current_best_epoch["params_not_optimized"] = deepcopy(not_optimized)
+                # self.current_best_epoch.config
+                # logger.info(
+                #     f"Best params:\n"
+                #     f"{json.dumps(self._get_params_details(self.current_best_epoch['tune_best_result'].config), sort_keys=False, indent=4)}"
+                # )
 
-            HyperoptTools.try_export_params(
-                self.config,
-                self.hyperopter.backtesting.strategy.get_strategy_name(),
-                self.current_best_epoch,
-            )
+                self.current_best_epoch["params_details"] = deepcopy(
+                    self.hyperopter._get_params_details(
+                        self.current_best_epoch["tune_best_result"].config
+                    )
+                )
+                self.current_best_epoch["params_not_optimized"] = deepcopy(
+                    not_optimized
+                )
 
-            # HyperoptTools.show_epoch_details(
-            #     self.current_best_epoch, self.total_epochs, self.print_json
-            # )
+                HyperoptTools.try_export_params(
+                    self.config,
+                    self.hyperopter.backtesting.strategy.get_strategy_name(),
+                    self.current_best_epoch,
+                )
 
-            json_results = df_results.to_json(orient="records")
-            json_results = json.loads(json_results)[0]
-            logger.info(f"Best results json:\n {json.dumps(json_results, indent=4)}")
+                # HyperoptTools.show_epoch_details(
+                #     self.current_best_epoch, self.total_epochs, self.print_json
+                # )
+
+                json_results = df_results.to_json(orient="records")
+                json_results = json.loads(json_results)[0]
+                logger.info(
+                    f"Best results json:\n {json.dumps(json_results, indent=4)}"
+                )
 
         else:
+            logger.error(f"Hyperopt error - no results - {results}")
             logger.info(f"Hyperopt finished - No epochs evaluated yet, no best result.")
 
         # print(self.current_best_epoch.metrics)
@@ -1025,7 +946,7 @@ class myLoggerCallback(LoggerCallback):
         total_epochs=-1,
         table_max_rows=-1,
         plot_metric="",
-        min_refresh_time=3, # seconds
+        min_refresh_time=3,  # seconds
     ) -> None:
 
         self.console_width = Console().width
@@ -1055,6 +976,7 @@ class myLoggerCallback(LoggerCallback):
         self.strategy = strategy
         self.count_trials = 0
         self.best_epoch = "N/A"
+        self._trial_ids = set()
 
         self.live = None
         self.table = Table(expand=True)
@@ -1104,22 +1026,24 @@ class myLoggerCallback(LoggerCallback):
     #     else:
     #         return list_in
 
-    def plot_chart_fn(self, width:int, height:int, plot_list: list, title: str=""):
+    def plot_chart_fn(self, width: int, height: int, plot_list: list, title: str = ""):
         plt.clf()
         len_plot_list = len(plot_list)
         x = range(1, len_plot_list + 1)
-        plt.plot(x, plot_list, marker = "hd") # dot fhd hd
+        plt.plot(x, plot_list, marker="hd")  # dot fhd hd
         if len_plot_list > 10:
-            xticks = [i for i in range(1, len_plot_list+1, len_plot_list//10)]
-            xlabels = [f"{(i):,.0f}" for i in range(1, len_plot_list+1, len_plot_list//10)]
+            xticks = [i for i in range(1, len_plot_list + 1, len_plot_list // 10)]
+            xlabels = [
+                f"{(i):,.0f}" for i in range(1, len_plot_list + 1, len_plot_list // 10)
+            ]
         else:
-            xticks = [i for i in range(1, len_plot_list+1, 1)]
-            xlabels = [f"{(i):,.0f}" for i in range(1, len_plot_list+1, 1)]
+            xticks = [i for i in range(1, len_plot_list + 1, 1)]
+            xlabels = [f"{(i):,.0f}" for i in range(1, len_plot_list + 1, 1)]
         plt.xticks(xticks, xlabels)
         plt.plotsize(width, height)
         if len(title) > 0:
             plt.title(title)
-        plt.theme('dark')
+        plt.theme("dark")
         return plt.build()
 
     def generate_table(self) -> Table:
@@ -1171,9 +1095,7 @@ class myLoggerCallback(LoggerCallback):
                 #     plot_list.append(
                 #         result
                 #     )  # [plot_metric_list.index(self.plot_metric)]
-                plot_list.append(
-                        result
-                    ) 
+                plot_list.append(result)
 
         # print("plot_metric", self.plot_metric, "len trial_results", len(self.trial_results),  "plot_list", plot_list)
         if plot_list and len(plot_list) > 1:
@@ -1192,8 +1114,11 @@ class myLoggerCallback(LoggerCallback):
                     ).tolist()
                 else:
                     plot_list_interp = plot_list
-                plot = self.plot_chart_fn(width=self.console_width_plot,  height=self.console_height // 4, 
-                                          plot_list=plot_list_interp)
+                plot = self.plot_chart_fn(
+                    width=self.console_width_plot,
+                    height=self.console_height // 4,
+                    plot_list=plot_list_interp,
+                )
                 rich_plot = Group(*self.decoder.decode(plot))
                 self.table_master.add_row(rich_plot)
                 # print(len(plot_list), len(self.plot_trial_results))
@@ -1280,6 +1205,7 @@ class myLoggerCallback(LoggerCallback):
     #         self.last_refresh_time = time.time()
 
     def on_trial_start(self, iteration, trials, trial, **info):
+        self._trial_ids.add(trial.trial_id)
         if self.live is None:
             self.live = Live(
                 self.table_master,
@@ -1288,11 +1214,12 @@ class myLoggerCallback(LoggerCallback):
             )  # , screen=True : crop', 'ellipsis', 'visible', , refresh_per_second=0.2, transient=True,
             self.live.start(refresh=True)
             self.last_refresh_time = time.time()
-        
-        # if self.refresh_enabled:
-        #     self.generate_table()
-        #     self.live.update(self.table_master, refresh=True)
-        #     self.last_refresh_time = time.time()
+
+        if self.refresh_enabled:
+            if time.time() - self.last_refresh_time > self.min_refresh_time:
+                self.generate_table()
+                self.live.update(self.table_master, refresh=True)
+                self.last_refresh_time = time.time()
 
     def append_trial_results(self, trial_id, result):
         # logger.info(f"append_trial_results result: {result}")
@@ -1348,6 +1275,12 @@ class myLoggerCallback(LoggerCallback):
 
     def on_experiment_start(self, trials, **info):
         self.refresh_enabled = True
+
+    def get_state(self) -> Optional[Dict]:
+        return {"trial_ids": self._trial_ids.copy()}
+
+    def set_state(self, state: Dict) -> Optional[Dict]:
+        self._trial_ids = state["trial_ids"]
 
 
 class myPBarCallback(LoggerCallback):
@@ -1502,8 +1435,8 @@ class ExperimentPlateauStopper(Stopper):
     def stop_all(self):
         """Return whether to stop and prevent trials from starting."""
         stop_all = (
-                        self.has_plateaued() and self._iterations_plateau >= self._patience
-                    ) or (self.no_increase() and self._iterations_noinc >= self._patience)
+            self.has_plateaued() and self._iterations_plateau >= self._patience
+        ) or (self.no_increase() and self._iterations_noinc >= self._patience)
         self.std_value = abs(np.std(self._top_values) / np.mean(self._top_values))
         if stop_all:
             # logger.info(

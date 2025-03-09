@@ -172,10 +172,11 @@ class IResolver:
                     directory=_path, object_name=object_name, add_source=add_source
                 )
                 if module:
-                    logger.info(
-                        f"Using resolved {cls.object_type.__name__.lower()[1:]} {object_name} "
-                        f"from '{module_path}'..."
-                    )
+                    if object_name not in ["CooldownPeriod"]:
+                        logger.info(
+                            f"Using resolved {cls.object_type.__name__.lower()[1:]} {object_name} "
+                            f"from '{module_path}'..."
+                        )
                     return module(**kwargs)
             except FileNotFoundError:
                 logger.warning('Path "%s" does not exist.', _path.resolve())

@@ -255,8 +255,8 @@ class Hyperopt:
     def ray_worker_logging_setup_func(self):
         logging.getLogger("ray").setLevel(logging.INFO)
         warnings.simplefilter("always")
-        # np.random.seed(self.random_state)
-        # random.seed(self.random_state)
+        np.random.seed(self.random_state)
+        random.seed(self.random_state)
 
     @staticmethod
     def get_lock_filename(config: Config) -> str:
@@ -531,7 +531,7 @@ class Hyperopt:
         # self.scheduler = scheduler
         return searcher_algo, scheduler
 
-    # not working - training_iteration = 1 after backtest
+    # # not working - training_iteration = 1 after backtest
     # @staticmethod
     # def resources_allocation_fn(
     #     config_jobs: int,
@@ -596,8 +596,8 @@ class Hyperopt:
     #         cpus_to_use = existing_required_cpus
 
 
-        # Assign new CPUs to the trial in a PlacementGroupFactory
-        return PlacementGroupFactory([{"CPU": cpus_to_use, "GPU": 0}])
+    #     # Assign new CPUs to the trial in a PlacementGroupFactory
+    #     return PlacementGroupFactory([{"CPU": cpus_to_use, "GPU": 0}])
 
     def start(self) -> None:
         results = None
@@ -680,7 +680,7 @@ class Hyperopt:
                             [
                                 {
                                     "CPU": 0.95 * cpus // self.config_jobs,
-                                    # "memory": 0.95 * self.ray_max_memory / self.config_jobs,
+                                    "memory": 0.95 * self.ray_max_memory / self.config_jobs,
                                 }
                             ]
                         ),

@@ -1599,10 +1599,14 @@ class Backtesting:
                     # only once per main candle
                     # and only if we can expect activity.
                     pair_detail = self.get_detail_data(pair, row)
-                    if pair_detail is not None and pair not in pair_detail_cache.keys():
+                    if pair_detail is not None:
                         pair_detail_cache[pair] = pair_detail
-                    row = pair_detail_cache[pair][idx]
 
+                    if pair in pair_detail_cache:
+                        row = pair_detail_cache[pair][idx]
+                    # else:
+                    #     logger.warning(f"pair {pair} not in pair_detail_cache - {pair_detail} {row} {len(row)} {idx}")
+                    
                 is_last_row = current_time_det == end_date
 
                 yield current_time_det, pair, row, is_last_row, trade_dir

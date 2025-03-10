@@ -654,6 +654,7 @@ class HyperOptimizer:
 
         if count_ray_finished_tasks <= 2*config_jobs:
             # time.sleep(max(0, 60 * (count_ray_current_workers - 1)))
+            random.seed(None)
             time.sleep(random.randint(1, 60))
 
         # logger.info(f"objective trial_resources: {ray.train.get_context().get_trial_resources()}")

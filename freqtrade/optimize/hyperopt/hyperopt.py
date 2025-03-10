@@ -100,6 +100,7 @@ plot_metric_list = [
     "Win_Draw_Loss_Win_perc",
     "Avg_profit",
     "Profit",
+    "profit_perc",
     "Winrate",
     "Avg_duration",
     "loss",

@@ -50,6 +50,7 @@ import numpy as np
 # Suppress scikit-learn FutureWarnings from skopt
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=FutureWarning)
+    warnings.filterwarnings("ignore", module="freqtrade.data.converter")
     warnings.filterwarnings("ignore", module="ray.tune.logger.tensorboardx")
     warnings.filterwarnings("ignore", module="ray.tune.callback")
     warnings.filterwarnings("ignore", module="ray.tune.execution.tune_controller")

@@ -65,6 +65,7 @@ from optuna.exceptions import ExperimentalWarning
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=FutureWarning)
     warnings.filterwarnings("ignore", category=ExperimentalWarning)
+    warnings.filterwarnings("ignore", module="freqtrade.data.converter")
     warnings.filterwarnings("ignore", module="ray.tune.logger.tensorboardx")
     warnings.filterwarnings("ignore", module="ray.tune.callback")
     warnings.filterwarnings("ignore", module="ray.tune.execution.tune_controller")

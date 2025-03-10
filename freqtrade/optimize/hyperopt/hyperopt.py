@@ -19,6 +19,7 @@ from copy import deepcopy
 import rapidjson
 import json
 from joblib import cpu_count, dump, load
+from functools import partial
 
 from freqtrade.constants import FTHYPT_FILEVERSION, LAST_BT_RESULT_FN, Config
 from freqtrade.enums import HyperoptState
@@ -81,7 +82,8 @@ with warnings.catch_warnings():
     from ray.tune.logger import LoggerCallback, CSVLoggerCallback, JsonLoggerCallback
     from ray.tune.stopper.stopper import Stopper
     from ray.tune.execution.placement_groups import PlacementGroupFactory
-    from ray.tune.schedulers import ResourceChangingScheduler
+    from ray.tune.schedulers import ResourceChangingScheduler, ASHAScheduler, FIFOScheduler
+    from ray.tune.schedulers.resource_changing_scheduler import DistributeResources
 
 
 ray_results_table_max_rows = 10  # -1 - half screen
@@ -136,8 +138,14 @@ class Hyperopt:
 
     def __init__(self, config: Config) -> None:
         self._hyper_out: HyperoptOutput = HyperoptOutput(streaming=True)
-
         self.config = config
+
+        self.random_state = self._set_random_state(
+            self.config.get("hyperopt_random_state")
+        )
+
+        np.random.seed(self.random_state)
+        random.seed(self.random_state)
 
         self.analyze_per_epoch = self.config.get("analyze_per_epoch", False)
         HyperoptStateContainer.set_state(HyperoptState.STARTUP)
@@ -247,8 +255,8 @@ class Hyperopt:
     def ray_worker_logging_setup_func(self):
         logging.getLogger("ray").setLevel(logging.INFO)
         warnings.simplefilter("always")
-        np.random.seed(self.hyperopter.random_state)
-        random.seed(self.hyperopter.random_state)
+        # np.random.seed(self.random_state)
+        # random.seed(self.random_state)
 
     @staticmethod
     def get_lock_filename(config: Config) -> str:
@@ -519,74 +527,81 @@ class Hyperopt:
             scheduler = tune.create_scheduler("hb_bohb")
         else:
             scheduler = tune.create_scheduler("fifo")
+            # scheduler = ASHAScheduler(max_t=16)
         # self.scheduler = scheduler
         return searcher_algo, scheduler
 
-    @staticmethod
-    def resources_allocation_fn(
-        tune_controller: "TuneController",
-        trial: Trial,
-        result: Dict[str, Any],
-        scheduler: "ResourceChangingScheduler",
-    ) -> Optional[PlacementGroupFactory]:
-        """This is a basic example of a resource allocating function.
+    # not working - training_iteration = 1 after backtest
+    # @staticmethod
+    # def resources_allocation_fn(
+    #     config_jobs: int,
+    #     max_memory_perc: float,
+    #     tune_controller: "TuneController",
+    #     trial: Trial,
+    #     result: Dict[str, Any],
+    #     scheduler: "ResourceChangingScheduler",
+    # ) -> Optional[PlacementGroupFactory]:
+    #     """This is a basic example of a resource allocating function.
 
-        The function naively balances available CPUs over live trials.
+    #     The function naively balances available CPUs over live trials.
 
-        This function returns a new ``PlacementGroupFactory`` with updated
-        resource requirements, or None. If the returned
-        ``PlacementGroupFactory`` is equal by value to the one the
-        trial has currently, the scheduler will skip the update process
-        internally (same with None).
+    #     This function returns a new ``PlacementGroupFactory`` with updated
+    #     resource requirements, or None. If the returned
+    #     ``PlacementGroupFactory`` is equal by value to the one the
+    #     trial has currently, the scheduler will skip the update process
+    #     internally (same with None).
 
-        See :class:`DistributeResources` for a more complex,
-        robust approach.
+    #     See :class:`DistributeResources` for a more complex,
+    #     robust approach.
 
-        Args:
-            tune_controller: Trial runner for this Tune run.
-                Can be used to obtain information about other trials.
-            trial: The trial to allocate new resources to.
-            result: The latest results of trial.
-            scheduler: The scheduler calling the function.
-        """
+    #     Args:
+    #         tune_controller: Trial runner for this Tune run.
+    #             Can be used to obtain information about other trials.
+    #         trial: The trial to allocate new resources to.
+    #         result: The latest results of trial.
+    #         scheduler: The scheduler calling the function.
+    #     """
 
-        # Get base trial resources as defined in
-        # ``tune.with_resources``
-        base_trial_resource = scheduler._base_trial_resources
+    #     # print(f"tune_controller: {tune_controller} / trial: {trial} / result: {result} / scheduler: {scheduler} / config_jobs: {config_jobs}")
+    #     # Get base trial resources as defined in
+    #     # ``tune.with_resources``
+    #     base_trial_resource = scheduler._base_trial_resources
 
-        # Don't bother if this is just the first iteration
-        if result["training_iteration"] < 1:
-            return None
+    #     # Don't bother if this is just the first iteration
+    #     print(f'training_iteration: {result["training_iteration"]} / config_jobs: {config_jobs} / base_trial_resource: {base_trial_resource.required_resources}')
+    #     if result["training_iteration"] < 1 or base_trial_resource is None:
+    #         return None
 
-        if base_trial_resource is None:
-            return None
+    #     # Assume that the number of CPUs cannot go below what was
+    #     # specified in ``Tuner.fit()``.
+    #     existing_required_cpus = base_trial_resource.required_resources.get("CPU", 0)
+    #     if existing_required_cpus == 0:
+    #         return None
 
-        # Assume that the number of CPUs cannot go below what was
-        # specified in ``Tuner.fit()``.
-        existing_required_cpus = base_trial_resource.required_resources.get("CPU", 0)
-        if existing_required_cpus == 0:
-            return None
+    #     # Get the number of CPUs available in total (not just free)
+    #     total_available_cpus = cpu_count() # tune_controller._resource_updater.get_num_cpus()
+    #     # count_live_trials = len(tune_controller.get_live_trials()) # wrong calculation
+    #     memory_usage_perc = psutil.virtual_memory().percent
+    #     if memory_usage_perc < max_memory_perc:
+    #         cpus_to_use = min(total_available_cpus//config_jobs, total_available_cpus)
+    #         # tune_controller.update_pending_trial_resources(resources)
+    #         # for trial in tune_controller._trials:
+    #         #     if trial.status in [Trial.PENDING] and cpu_to_use != existing_required_cpus:
+    #         #         print(trial, trial.status, existing_required_cpus, cpu_to_use )
+    #         #         trial.update_resources(resources=PlacementGroupFactory([{"CPU": cpu_to_use}]))
+    #         # logger.info(
+    #         #     f"resources_allocation_fn - existing_required_cpus: {existing_required_cpus} / cpu_to_use: {cpu_to_use} / total_available_cpus: {total_available_cpus} / memory_usage_perc: {memory_usage_perc}"
+    #         # )
+    #     else:
+    #         cpus_to_use = existing_required_cpus
 
-        # Get the number of CPUs available in total (not just free)
-        total_available_cpus = tune_controller._resource_updater.get_num_cpus()
-        count_live_trials = len(tune_controller.get_live_trials())
-        memory_usage_perc = psutil.virtual_memory().percent
-        if memory_usage_perc < 80:
-            cpu_to_use = max(1, existing_required_cpus - 2)
-            logger.info(
-                f"resources_allocation_fn - existing_required_cpus: {existing_required_cpus} / cpu_to_use: {cpu_to_use} / total_available_cpus: {total_available_cpus} / count_live_trials: {count_live_trials} / memory_usage_perc: {memory_usage_perc}"
-            )
-        else:
-            cpu_to_use = existing_required_cpus
 
         # Assign new CPUs to the trial in a PlacementGroupFactory
-        return PlacementGroupFactory([{"CPU": cpu_to_use}])  # , "GPU": 0
+        return PlacementGroupFactory([{"CPU": cpus_to_use, "GPU": 0}])
 
     def start(self) -> None:
         results = None
-        self.random_state = self._set_random_state(
-            self.config.get("hyperopt_random_state")
-        )
+
         logger.info(f"Using optimizer random state: {self.random_state}")
         self.hyperopt_table_header = -1
         self.hyperopter.prepare_hyperopt(self.data_pickle_file, self.detail_data_pickle_file)
@@ -608,8 +623,12 @@ class Hyperopt:
             )
 
         # self.scheduler = ResourceChangingScheduler(
-        #     base_scheduler=scheduler,
-        #     resources_allocation_function=self.resources_allocation_fn,
+        #     base_scheduler=self.scheduler, # self.scheduler, FIFOScheduler()
+        #     resources_allocation_function=partial(self.resources_allocation_fn, self.config_jobs, self.ray_max_memory_perc),
+        # )
+        # self.scheduler = ResourceChangingScheduler(
+        #     base_scheduler=self.scheduler, # self.scheduler, FIFOScheduler()
+        #     resources_allocation_function=DistributeResources(add_bundles=True, reserve_resources={"CPU": 4}),
         # )
 
         HyperOptimizer.ray_setup_func()
@@ -641,10 +660,11 @@ class Hyperopt:
                     max_date_ft=self.hyperopter.max_date,
                     total_epochs_ft=self.total_epochs,
                     custom_hyperopt_ft=self.hyperopter.custom_hyperopt,
-                    advise_and_trim_ft=self.hyperopter.advise_and_trim,
                     _get_results_dict_ft=self.hyperopter._get_results_dict,
+                    _advise_and_trim_ft=self.hyperopter.advise_and_trim,
                     # _save_result_ft=self._save_result,
                     results_file_ft=self.results_file,
+                    ray_max_memory_perc=self.ray_max_memory_perc,
                 )
                 if self.ray_max_memory is None:
                     trainable_with_resources = tune.with_resources(
@@ -660,7 +680,7 @@ class Hyperopt:
                             [
                                 {
                                     "CPU": 0.95 * cpus // self.config_jobs,
-                                    "memory": 0.95 * self.ray_max_memory / self.config_jobs,
+                                    # "memory": 0.95 * self.ray_max_memory / self.config_jobs,
                                 }
                             ]
                         ),
@@ -754,7 +774,7 @@ class Hyperopt:
                     stop_cb = None
 
                 tuner = tune.Tuner(
-                    trainable_with_resources,
+                    trainable_with_resources, # trainable_with_parameters trainable_with_resources
                     tune_config=tune.TuneConfig(
                         metric="loss",
                         mode="min",

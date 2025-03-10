@@ -2,6 +2,7 @@
 This module contains the hyperopt optimizer class, which needs to be pickled
 and will be sent to the hyperopt worker processes.
 """
+
 ### TO DO
 
 import logging
@@ -19,6 +20,8 @@ from pandas import DataFrame, json_normalize
 from pathlib import Path
 import setproctitle
 import gc
+import psutil
+import random
 from tabulate import tabulate
 
 from freqtrade.constants import DATETIME_PRINT_FORMAT, Config
@@ -50,7 +53,9 @@ with warnings.catch_warnings():
     warnings.filterwarnings("ignore", module="ray.tune.logger.tensorboardx")
     warnings.filterwarnings("ignore", module="ray.tune.callback")
     warnings.filterwarnings("ignore", module="ray.tune.execution.tune_controller")
-    logging.getLogger("ray.tune.schedulers.resource_changing_scheduler").setLevel(logging.WARNING)
+    logging.getLogger("ray.tune.schedulers.resource_changing_scheduler").setLevel(
+        logging.WARNING
+    )
     from skopt import Optimizer
     from skopt.space import Dimension
     from ray import tune
@@ -108,7 +113,6 @@ class HyperOptimizer:
         if HyperoptTools.has_space(self.config, "sell"):
             # Make sure use_exit_signal is enabled
             self.config["use_exit_signal"] = True
-
 
     def prepare_hyperopt(self, data_pickle_file, detail_data_pickle_file) -> None:
         # Initialize spaces ...
@@ -335,9 +339,7 @@ class HyperOptimizer:
                         original_dim.high_orig,
                         1 / pow(10, original_dim.decimals),
                     )
-            elif (
-                type(original_dim) == Real
-            ):
+            elif type(original_dim) == Real:
                 self.dimensions[original_dim.name] = tune.uniform(
                     original_dim.low,
                     original_dim.high,
@@ -354,7 +356,6 @@ class HyperOptimizer:
                 raise Exception(
                     f"Unknown search space {original_dim} / {type(original_dim)}"
                 )
-
 
     def advise_and_trim(self, data: dict[str, DataFrame]) -> dict[str, DataFrame]:
         preprocessed = self.backtesting.strategy.advise_all_indicators(data)
@@ -388,17 +389,19 @@ class HyperOptimizer:
                 f"({(self.max_date - self.min_date).days} days).."
             )
             # Store non-trimmed data - will be trimmed after signal generation.
-            dump(data, data_pickle_file)
-            if self.backtesting.timeframe_detail:
-                self.backtesting.load_bt_data_detail()
-                dump(self.backtesting.detail_data, detail_data_pickle_file)
-                self.backtesting.detail_data = {}
+            dump(data, data_pickle_file)  # preprocessed
+            if self.backtesting.timeframe_detail is None:
+                self.backtesting.timeframe_detail = "5m"
+            self.backtesting.load_bt_data_detail()
+            dump(self.backtesting.detail_data, detail_data_pickle_file)
+            self.backtesting.detail_data = {}
         else:
             dump(data, data_pickle_file)
-            if self.backtesting.timeframe_detail:
-                self.backtesting.load_bt_data_detail()
-                dump(self.backtesting.detail_data, detail_data_pickle_file)
-                self.backtesting.detail_data = {}
+            if self.backtesting.timeframe_detail is None:
+                self.backtesting.timeframe_detail = "5m"
+            self.backtesting.load_bt_data_detail()
+            dump(self.backtesting.detail_data, detail_data_pickle_file)
+            self.backtesting.detail_data = {}
 
     def _get_results_dict(
         self,
@@ -432,8 +435,10 @@ class HyperOptimizer:
         # interesting -- consider it as 'bad' (assigned max. loss value)
         # in order to cast this hyperspace point away from optimization
         # path. We do not want to optimize 'hodl' strategies.
+        # print(f'trade_count: {trade_count} / hyperopt_min_trades: {self.config.get("hyperopt_min_trades",0)}')
+        # print(f'backtesting_results["results"]: {backtesting_results["results"]}')
         loss: float = MAX_LOSS
-        if trade_count >= self.config.get("hyperopt_min_trades",0):
+        if trade_count >= self.config.get("hyperopt_min_trades", 0):
             loss = self.calculate_loss(
                 results=backtesting_results["results"],
                 trade_count=trade_count,
@@ -532,9 +537,10 @@ class HyperOptimizer:
         max_date_ft: str,
         total_epochs_ft: int,
         custom_hyperopt_ft: Any,
-        advise_and_trim_ft: Any,
         _get_results_dict_ft: Any,
+        _advise_and_trim_ft: Any,
         results_file_ft: Path,
+        ray_max_memory_perc: float,
     ) -> Dict[str, Any]:
         """
         Used Optimize function.
@@ -543,22 +549,114 @@ class HyperOptimizer:
         """
 
         logger = HyperOptimizer.ray_setup_func()
-        # logger.info(f"ray hyperopt objective - ray_available_resources: {ray.available_resources()}")
         mem_available = ray.available_resources().get("memory", 0)
 
+        # ray.get_runtime_context().get_trial_id()
+        # print(f"ray_available_resources: {ray.available_resources()}")
+        # print(
+        #     f"ray_assigned_resources: {ray.get_runtime_context().get_assigned_resources()}"
+        # )
+        # print(
+        #     "list_placement_groups",
+        #     ray.util.state.list_placement_groups(
+        #         address=ray.get_runtime_context().gcs_address,
+        #         filters=[("state", "=", "PENDING")],
+        #         raise_on_missing_output=False,
+        #     ),
+        # )
+
         # ray_current_workers = ray.util.state.list_workers(
-        #     address=ray.get_runtime_context().gcs_address,
-        #     filters=[("is_alive", "=", "True")],
-        #     raise_on_missing_output=False,
+        # address=ray.get_runtime_context().gcs_address,
+        # filters=[("is_alive", "=", "True")],
+        # raise_on_missing_output=False,
         # )
         # logger.info(f"ray workers: {len(ray_current_workers)} - {ray_current_workers}")
 
-        # ray_current_tasks = ray.util.state.list_tasks(
+        # count_ray_current_tasks = len(
+        #     ray.util.state.list_tasks(
+        #         address=ray.get_runtime_context().gcs_address,
+        #         filters=[("state", "!=", "FINISHED")],
+        #         raise_on_missing_output=False,
+        #     )
+        # )
+        # count_ray_all_tasks = len(
+        #     ray.util.state.list_tasks(
+        #         address=ray.get_runtime_context().gcs_address,
+        #         raise_on_missing_output=False,
+        #     )
+        # )
+        # count_ray_current_workers = len(
+        #     ray.util.state.list_workers(
+        #         address=ray.get_runtime_context().gcs_address,
+        #         filters=[("is_alive", "=", "True")],
+        #         raise_on_missing_output=False,
+        #     )
+        # )
+        # count_ray_all_workers = len(
+        #     ray.util.state.list_workers(
+        #         address=ray.get_runtime_context().gcs_address,
+        #         raise_on_missing_output=False,
+        #     )
+        # )
+
+        # count_ray_current_pgs = len(
+        #     ray.util.state.list_placement_groups(
+        #         address=ray.get_runtime_context().gcs_address,
+        #         filters=[("state", "=", "CREATED")],
+        #         raise_on_missing_output=False,
+        #     )
+        # )
+        # count_ray_all_pgs = len(
+        #     ray.util.state.list_placement_groups(
+        #         address=ray.get_runtime_context().gcs_address,
+        #         raise_on_missing_output=False,
+        #     )
+        # )
+
+        # logger.info(
+        #     f"count_ray_current_pgs: {count_ray_current_pgs} / count_ray_all_pgs: {count_ray_all_pgs} / sleep: {60*count_ray_all_pgs}"
+        # )
+
+        # jobs_finished = ray.util.state.list_jobs(
         #     address=ray.get_runtime_context().gcs_address,
-        #     filters=[("state", "!=", "FINISHED")],
+        #     filters=[("status", "=", "SUCCEEDED")],
         #     raise_on_missing_output=False,
         # )
-        # logger.info(f"ray tasks: {len(ray_current_tasks)} - {ray_current_tasks}")
+        # jobs = ray.util.state.list_jobs(
+        #     address=ray.get_runtime_context().gcs_address,
+        #     raise_on_missing_output=False,
+        # )
+        # logger.info(f"ray jobs_finished: {jobs_finished} / jobs: {jobs}")
+
+        # actors_finished =  ray.util.state.list_actors(
+        #     address=ray.get_runtime_context().gcs_address,
+        #     filters=[("state", "=", "DEAD")],
+        #     raise_on_missing_output=False,
+        # )
+        # actors = ray.util.state.list_actors(
+        #     address=ray.get_runtime_context().gcs_address,
+        #     raise_on_missing_output=False,
+        # )
+        # logger.info(f"ray actors_finished: {actors_finished} / actors: {actors}")
+
+        config_jobs = config.get("hyperopt_jobs", -1)
+
+        count_ray_finished_tasks = len(
+            ray.util.state.list_tasks(
+                address=ray.get_runtime_context().gcs_address,
+                filters=[
+                    ("state", "=", "FINISHED"),
+                    ("func_or_class_name", "=", "ImplicitFunc.train"),
+                ],
+                raise_on_missing_output=False,
+            )
+        )
+
+        if count_ray_finished_tasks <= 2*config_jobs:
+            # time.sleep(max(0, 60 * (count_ray_current_workers - 1)))
+            time.sleep(random.randint(1, 60))
+
+        # logger.info(f"objective trial_resources: {ray.train.get_context().get_trial_resources()}")
 
         obj_id = ray.get_runtime_context().get_task_id()[:10]
         # logger.error(f"""worker_id: {ray.get_runtime_context().get_worker_id()} /
@@ -571,15 +669,20 @@ class HyperOptimizer:
         setproctitle.setproctitle(f"ray::{strategy_name}::{obj_id}")
         os.chdir(Path(config_ft["user_data_dir"]).parent.absolute())
 
-        # mem_used = psutil.virtual_memory().percent
-        # if max_used_memory > 0 and mem_used > max_used_memory:
-        #     logger.warning(f"objective paused - high memory usage {mem_used}")
-        #     while psutil.virtual_memory().percent > max_used_memory:
-        #         sleep(60)
-        #     logger.warning(
-        #         f"objective resumed - memory usage {psutil.virtual_memory().percent}"
-        #     )
+        mem_used = psutil.virtual_memory().percent
+        if (
+            ray_max_memory_perc
+            and ray_max_memory_perc > 0
+            and mem_used > 100.0 * ray_max_memory_perc
+        ):
+            logger.warning(f"objective paused - high memory usage {mem_used}")
+            while psutil.virtual_memory().percent > 100.0 * ray_max_memory_perc:
+                time.sleep(60)
+            logger.warning(
+                f"objective resumed - memory usage {psutil.virtual_memory().percent}"
+            )
 
+        analyze_per_epoch = config.get("analyze_per_epoch", False)
         # print(f"objective start - {os.getcwd()}")
         logger.debug(f"objective start - {os.getcwd()}")
         if custom_trade_info is not None:
@@ -645,7 +748,15 @@ class HyperOptimizer:
         data = load(data_pickle_file_ft, mmap_mode="r")
         if backtesting.timeframe_detail:
             backtesting.detail_data = load(detail_data_pickle_file_ft, mmap_mode="r")
-        processed = advise_and_trim_ft(data)
+
+        # if analyze_per_epoch:
+        #     processed = _advise_and_trim_ft(data)
+        # else:
+        #     processed = data
+
+        processed = _advise_and_trim_ft(data)
+        del data
+        gc.collect()
 
         # logger.info(
         #     f"Hyperopting with data from "
@@ -748,12 +859,12 @@ class HyperOptimizer:
                 * trial_result["wins"]
             )
 
-
         backtesting = None
 
         gc.collect()
 
-        # print(ray_result)
+        # print(trial_result)
+        # print("results_explanation", result["results_explanation"])
         # _save_result_ft(result, results_file_ft)
 
         # train.report(ray_result)

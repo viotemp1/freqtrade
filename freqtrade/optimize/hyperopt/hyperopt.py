@@ -83,7 +83,11 @@ with warnings.catch_warnings():
     from ray.tune.logger import LoggerCallback, CSVLoggerCallback, JsonLoggerCallback
     from ray.tune.stopper.stopper import Stopper
     from ray.tune.execution.placement_groups import PlacementGroupFactory
-    from ray.tune.schedulers import ResourceChangingScheduler, ASHAScheduler, FIFOScheduler
+    from ray.tune.schedulers import (
+        ResourceChangingScheduler,
+        ASHAScheduler,
+        FIFOScheduler,
+    )
     from ray.tune.schedulers.resource_changing_scheduler import DistributeResources
 
 
@@ -167,7 +171,9 @@ class Hyperopt:
             / f"strategy_{strategy}_{time_now}.fthypt"
         )
 
-        self.data_pickle_file = f'{self.config["user_data_dir"]}/hyperopt_results/hyperopt_tickerdata.pkl'
+        self.data_pickle_file = (
+            f'{self.config["user_data_dir"]}/hyperopt_results/hyperopt_tickerdata.pkl'
+        )
         self.detail_data_pickle_file = f'{self.config["user_data_dir"]}/hyperopt_results/hyperopt_detail_tickerdata.pkl'
 
         self.hyperopt_results_file: Path = (
@@ -268,7 +274,11 @@ class Hyperopt:
         """
         Remove hyperopt pickle files to restart hyperopt.
         """
-        for f in [self.results_file, self.data_pickle_file, self.detail_data_pickle_file]:
+        for f in [
+            self.results_file,
+            self.data_pickle_file,
+            self.detail_data_pickle_file,
+        ]:
             p = Path(f)
             if p.is_file():
                 logger.info(f"Removing `{p}`.")
@@ -597,7 +607,6 @@ class Hyperopt:
     #     else:
     #         cpus_to_use = existing_required_cpus
 
-
     #     # Assign new CPUs to the trial in a PlacementGroupFactory
     #     return PlacementGroupFactory([{"CPU": cpus_to_use, "GPU": 0}])
 
@@ -606,7 +615,9 @@ class Hyperopt:
 
         logger.info(f"Using optimizer random state: {self.random_state}")
         self.hyperopt_table_header = -1
-        self.hyperopter.prepare_hyperopt(self.data_pickle_file, self.detail_data_pickle_file)
+        self.hyperopter.prepare_hyperopt(
+            self.data_pickle_file, self.detail_data_pickle_file
+        )
 
         cpus = cpu_count()
         logger.info(f"Found {cpus} CPU cores. Let's make them scream!")
@@ -682,7 +693,9 @@ class Hyperopt:
                             [
                                 {
                                     "CPU": 0.95 * cpus // self.config_jobs,
-                                    "memory": 0.95 * self.ray_max_memory / self.config_jobs,
+                                    "memory": 0.95
+                                    * self.ray_max_memory
+                                    / self.config_jobs,
                                 }
                             ]
                         ),
@@ -731,9 +744,9 @@ class Hyperopt:
                     f"ray available memory (before tune): {(mem_available_perc):,.2f}% - {(mem_available_bytes/10**9):,.2f}GB/{(psutil.virtual_memory().total/10**9):,.2f}GB"
                 )
 
-                logging.getLogger("ray.tune.schedulers.resource_changing_scheduler").setLevel(
-                    logging.WARNING
-                )
+                logging.getLogger(
+                    "ray.tune.schedulers.resource_changing_scheduler"
+                ).setLevel(logging.WARNING)
 
                 if (
                     self.print_all or self.plot_chart
@@ -776,7 +789,7 @@ class Hyperopt:
                     stop_cb = None
 
                 tuner = tune.Tuner(
-                    trainable_with_resources, # trainable_with_parameters trainable_with_resources
+                    trainable_with_resources,  # trainable_with_parameters trainable_with_resources
                     tune_config=tune.TuneConfig(
                         metric="loss",
                         mode="min",
@@ -959,7 +972,352 @@ class Hyperopt:
         # {'Trades': '4681', 'Win_Draw_Loss_Win_perc': '3517     0  1164  75.1', 'Avg_profit': '  3.12%', 'Profit': '195340381.096 USDT (19,534,038.11%)', 'Avg_duration': '0 days 21:49:00', 'Objective': '-38,157,864.48667', 'is_profit': True, 'Max_Drawdown_Acct': '  5274021.894 USDT    (5.18%)', 'loss': -38157864.486667246, 'timestamp': 1718690291, 'checkpoint_dir_name': None, 'done': True, 'training_iteration': 1, 'trial_id': '06452780', 'date': '2024-06-18_08-58-11', 'time_this_iter_s': 61.3154194355011, 'time_total_s': 61.3154194355011, 'pid': 1931179, 'hostname': 'vioUbuntu2', 'node_ip': '10.0.0.251', 'config': {'buy_fastk_rsi_patterns': 95, 'buy_max_slippage': 1.075, 'buy_prev_cbuys_count': 3, 'buy_prev_cbuys_rwindow': 5, 'buy_prev_min_close_age': 8, 'buy_prev_min_close_perc': 37.4, 'buy_prev_min_close_rwindow': 5, 'buy_proposed_stake_limit': 3731, 'buy_proposed_stake_limit_margin': 0.208, 'csl_5_step1_SL': 0.052, 'csl_5_step1_time': 591.366, 'csl_5_step2_SL': 0.035, 'csl_5_step2_time': 1625.187, 'csl_5_step3_SL': 0.075, 'csl_5_step3_time': 3717.144, 'csl_5_step4_SL': 0.248, 'sell_order_max_age': 2.8, 'sell_order_min_profit': 0.06, 'stoploss': -0.097}, 'time_since_restore': 61.3154194355011, 'iterations_since_restore': 1, 'experiment_tag': '139_buy_fastk_rsi_patterns=95,buy_max_slippage=1.0750,buy_prev_cbuys_count=3,buy_prev_cbuys_rwindow=5,buy_prev_min_close_age=8,buy_prev_min_close_perc=37.4000,buy_prev_min_close_rwindow=5,buy_proposed_stake_limit=3731,buy_proposed_stake_limit_margin=0.2080,csl_5_step1_SL=0.0520,csl_5_step1_time=591.3660,csl_5_step2_SL=0.0350,csl_5_step2_time=1625.1870,csl_5_step3_SL=0.0750,csl_5_step3_time=3717.1440,csl_5_step4_SL=0.2480,sell_order_max_age=2.8000,sell_order_min_profit=0.0600,stoploss=-0.0970'}
 
 
-# https://github.com/Textualize/rich/discussions/482
+# # https://github.com/Textualize/rich/discussions/482
+# class myLoggerCallback(LoggerCallback):
+#     def __init__(
+#         self,
+#         strategy="",
+#         print_all=False,
+#         total_epochs=-1,
+#         table_max_rows=-1,
+#         plot_metric="",
+#         min_refresh_time=3,  # seconds
+#     ) -> None:
+
+#         self.console_width = Console().width
+#         self.console_width_plot = self.console_width - 4
+#         self.console_height = Console().height
+#         self.decoder = AnsiDecoder()
+#         self.refresh_enabled = True
+
+#         if table_max_rows <= 0:
+#             table_max_rows = self.console_height // 3
+
+#         self.min_refresh_time = min_refresh_time
+#         self.trial_results = deque(maxlen=table_max_rows)  # []
+#         self.plot_trial_results = []
+#         # deque(maxlen=min(int(0.9*self.console_width), self.console_width-14)) #
+#         self.plot_trial_results_len = min(
+#             int(0.9 * self.console_width), self.console_width - 14
+#         )
+#         self.best_loss = MAX_LOSS
+#         self.print_all = print_all
+#         self.plot_metric = plot_metric
+#         if total_epochs <= 0:
+#             logger.warning(
+#                 f"Please set total_epochs for myLoggerCallback - {total_epochs}"
+#             )
+#         self.total_epochs = total_epochs
+#         self.strategy = strategy
+#         self.count_trials = 0
+#         self.best_epoch = "N/A"
+#         self._trial_ids = set()
+
+#         self.live = None
+#         self.table = Table(expand=True)
+#         self.table_columns = [
+#             "Trial",
+#             "Trades",
+#             "Win  Draw  Loss  Win%",
+#             "Avg profit%",
+#             "Profit Total",
+#             "Winrate%",
+#             "Avg duration",
+#             "Objective",
+#             "Max Drawdown",
+#             # "Epoch",
+#             "TTR",
+#         ]
+#         for col in self.table_columns:
+#             self.table.add_column(col)
+#         self.table_master = self.generate_empty_table()
+#         self.refresh_chart = 100
+#         self.last_refresh_time = time.time()
+
+#     def generate_empty_table(self) -> Table:
+#         return Table(
+#             title=f"{self.strategy} {self.plot_metric} - Epoch: {self.count_trials}/{self.total_epochs} - Best: {self.best_epoch}",
+#             title_style=Style(color="white", bgcolor="black", bold=True),
+#             show_header=False,
+#             padding=(0, 0),
+#             expand=True,
+#         )
+
+#     # def resize_list(self, list_in: [], max_len: int):
+#     #     if len(list_in) > max_len:
+#     #         list_out = []
+#     #         n_averaged_elements = (len(list_in) // max_len) + 1
+#     #         for i in range(0, len(list_in), n_averaged_elements):
+#     #             slice_from_index = i
+#     #             slice_to_index = slice_from_index + n_averaged_elements
+#     #             if self.plot_metric in ["Profit", "Winrate"]:
+#     #                 list_out.append(np.max(list_in[slice_from_index:slice_to_index]))
+#     #             elif self.plot_metric == "loss":
+#     #                 list_out.append(np.min(list_in[slice_from_index:slice_to_index]))
+#     #             else:
+#     #                 list_out.append(np.mean(list_in[slice_from_index:slice_to_index]))
+#     #         list_out = list_out[-max_len:]
+#     #         return list_out
+#     #     else:
+#     #         return list_in
+
+#     def plot_chart_fn(self, width: int, height: int, plot_list: list, title: str = ""):
+#         plt.clf()
+#         len_plot_list = len(plot_list)
+#         x = range(1, len_plot_list + 1)
+#         plt.plot(x, plot_list, marker="hd")  # dot fhd hd
+#         if len_plot_list > 10:
+#             xticks = [i for i in range(1, len_plot_list + 1, len_plot_list // 10)]
+#             xlabels = [
+#                 f"{(i):,.0f}" for i in range(1, len_plot_list + 1, len_plot_list // 10)
+#             ]
+#         else:
+#             xticks = [i for i in range(1, len_plot_list + 1, 1)]
+#             xlabels = [f"{(i):,.0f}" for i in range(1, len_plot_list + 1, 1)]
+#         plt.xticks(xticks, xlabels)
+#         plt.plotsize(width, height)
+#         if len(title) > 0:
+#             plt.title(title)
+#         plt.theme("dark")
+#         return plt.build()
+
+#     def generate_table(self) -> Table:
+#         """Make a new table."""
+#         self.table_master = self.generate_empty_table()
+
+#         self.table = Table(
+#             # title=f"{self.strategy} - Epoch {self.count_trials}/{self.total_epochs}",
+#             expand=True,
+#         )
+#         for col in self.table_columns:
+#             self.table.add_column(col)
+
+#         for result in self.trial_results:
+#             self.table.add_row(*result)
+
+#         self.table_master.add_row(self.table)
+
+#         plot_list = None
+#         if self.plot_metric and len(self.plot_metric) > 0:
+#             if self.plot_metric in plot_metric_list:
+#                 plot_list = []
+#             else:
+#                 logger.error(
+#                     f"plot_metric {self.plot_metric} not in {plot_metric_list}"
+#                 )
+#                 self.plot_metric = ""
+
+#         if plot_list is not None:
+#             for result in self.plot_trial_results:
+#                 # if self.plot_metric == "Profit":
+#                 #     profit = result  # [plot_metric_list.index(self.plot_metric)]
+#                 #     try:
+#                 #         profit = (
+#                 #             profit.split("(")[1]
+#                 #             .replace(")", "")
+#                 #             .replace("%", "")
+#                 #             .replace(",", "")
+#                 #         )
+#                 #         profit = float(profit)
+#                 #         plot_list.append(profit)
+#                 #     except:
+#                 #         # print(result)
+#                 #         # profit = math.nan
+#                 #         plot_list.append(nan)
+#                 #         pass
+#                 # else:
+#                 #     result = float(result)
+#                 #     plot_list.append(
+#                 #         result
+#                 #     )  # [plot_metric_list.index(self.plot_metric)]
+#                 plot_list.append(result)
+
+#         # print("plot_metric", self.plot_metric, "len trial_results", len(self.trial_results),  "plot_list", plot_list)
+#         if plot_list and len(plot_list) > 1:
+#             try:
+#                 ## plot_list = plot_list[-int(0.9*self.console_width):]
+#                 # rich_plot = acp.plot(
+#                 #     self.resize_list(plot_list, self.plot_trial_results_len),
+#                 #     {"height": self.console_height // 4, "format": "{:.4e}"},
+#                 # )
+#                 plot_list_arr = np.array(plot_list)
+#                 if len(plot_list_arr[np.isnan(plot_list_arr) == False]) > 1:
+#                     plot_list_interp = np.interp(
+#                         np.arange(len(plot_list_arr)),
+#                         np.arange(len(plot_list_arr))[np.isnan(plot_list_arr) == False],
+#                         plot_list_arr[np.isnan(plot_list_arr) == False],
+#                     ).tolist()
+#                 else:
+#                     plot_list_interp = plot_list
+#                 plot = self.plot_chart_fn(
+#                     width=self.console_width_plot,
+#                     height=self.console_height // 4,
+#                     plot_list=plot_list_interp,
+#                 )
+#                 rich_plot = Group(*self.decoder.decode(plot))
+#                 self.table_master.add_row(rich_plot)
+#                 # print(len(plot_list), len(self.plot_trial_results))
+#             except Exception as e:
+#                 print(f"myLoggerCallback - generate_table Error: {repr(e)}")
+#                 logger.error(f"myLoggerCallback - generate_table Error: {repr(e)}")
+#                 pass
+
+#         progress = int(self.count_trials * self.live.console.width / self.total_epochs)
+#         table_progress = Table(
+#             show_header=False,
+#             expand=True,
+#             pad_edge=False,
+#             show_lines=False,
+#             box=None,
+#         )
+#         table_progress.add_row(
+#             Text("Progress"),
+#             Bar(
+#                 self.live.console.width,
+#                 0,
+#                 progress,
+#                 color="yellow",
+#                 bgcolor="black",
+#             ),
+#         )
+#         self.table_master.add_row(table_progress)
+
+#         table_memory = Table(
+#             show_header=False,
+#             expand=True,
+#             pad_edge=False,
+#             show_lines=False,
+#             box=None,
+#         )
+#         table_memory.add_row(
+#             Text("Memory  "),
+#             Bar(
+#                 self.live.console.width,
+#                 0,
+#                 int(self.live.console.width * psutil.virtual_memory().percent / 100.0),
+#                 color="green" if psutil.virtual_memory().percent < 90 else "red",
+#                 bgcolor="black",
+#             ),
+#         )
+#         self.table_master.add_row(table_memory)
+
+#         table_cpu = Table(
+#             show_header=False,
+#             expand=True,
+#             pad_edge=False,
+#             show_lines=False,
+#             box=None,
+#         )
+#         table_cpu.add_row(
+#             Text("CPU     "),
+#             Bar(
+#                 self.live.console.width,
+#                 0,
+#                 int(self.live.console.width * psutil.cpu_percent() / 100.0),
+#                 color="blue",
+#                 bgcolor="black",
+#             ),
+#         )
+#         self.table_master.add_row(table_cpu)
+
+#     # def on_step_begin(self, iteration, trials, **info):  ## too often
+#     #     # if self.live is None:
+#     #     #     self.live = Live(
+#     #     #         self.table_master,
+#     #     #         vertical_overflow="ellipsis",
+#     #     #         auto_refresh=False,
+#     #     #     )  # , screen=True : crop', 'ellipsis', 'visible', , refresh_per_second=0.2, transient=True,
+#     #     #     self.live.start(refresh=True)
+
+#     #     if self.refresh_enabled:
+#     #         start_date = time.time()
+#     #         if iteration % self.refresh_chart == 0 and self.live:
+#     #             # self.logger.warning(f"myLoggerCallback - on_step_begin - iteration: {iteration}")
+#     #             self.generate_table()
+#     #             self.live.update(self.table_master, refresh=True)
+#     #         if time.time() - start_date > 0.1:
+#     #             self.refresh_chart = int(2 * self.refresh_chart)
+#     #         self.last_refresh_time = time.time()
+
+#     def on_trial_start(self, iteration, trials, trial, **info):
+#         self._trial_ids.add(trial.trial_id)
+#         if self.live is None:
+#             self.live = Live(
+#                 self.table_master,
+#                 vertical_overflow="ellipsis",
+#                 auto_refresh=False,
+#             )  # , screen=True : crop', 'ellipsis', 'visible', , refresh_per_second=0.2, transient=True,
+#             self.live.start(refresh=True)
+#             self.last_refresh_time = time.time()
+
+#         if self.refresh_enabled:
+#             if time.time() - self.last_refresh_time > self.min_refresh_time:
+#                 self.generate_table()
+#                 self.live.update(self.table_master, refresh=True)
+#                 self.last_refresh_time = time.time()
+
+#     def append_trial_results(self, trial_id, result):
+#         # logger.info(f"append_trial_results result: {result}")
+#         loss = result["loss"]
+#         if abs(loss) > 100 or abs(loss) < 0.001:
+#             loss = f"{result['loss']:,.6e}"
+#         else:
+#             loss = f"{result['loss']:,.6f}"
+
+#         self.trial_results.append(
+#             (
+#                 f"{trial_id}",
+#                 f"{result['Trades']}",
+#                 f"{result['Win_Draw_Loss_Win_perc']}",
+#                 f"{(100*result['Avg_profit']):,.4f}",
+#                 f"{(result['Profit']):,.2f}",
+#                 f"{(result['Winrate']):,.2f}",
+#                 f"{result['Avg_duration']}",
+#                 loss,
+#                 f"{(result['Max_Drawdown_Acct']):,.2f}",
+#                 # f"{self.count_trials}",
+#                 f"{(result['time_total_s']):,.2f}",
+#             )
+#         )
+
+#     def on_trial_result(self, iteration, trials, trial, result, **info):
+#         self.count_trials += 1  # len(trials)
+#         # print(
+#         #     f"Results for trial {trial} / iteration {iteration} / count trials = {self.count_trials}"
+#         # )
+#         # print(f"result: {result}")
+
+#         if self.print_all:
+#             self.append_trial_results(self.count_trials, result)
+#         elif result["loss"] < self.best_loss:
+#             self.best_loss = result["loss"]
+#             self.best_epoch = self.count_trials
+#             self.append_trial_results(self.count_trials, result)
+
+#         if self.plot_metric and len(self.plot_metric) > 0:
+#             self.plot_trial_results.append(result[self.plot_metric])
+
+#         if self.refresh_enabled:
+#             if time.time() - self.last_refresh_time > self.min_refresh_time:
+#                 self.generate_table()
+#                 self.live.update(self.table_master, refresh=True)
+#                 self.last_refresh_time = time.time()
+
+#     def on_experiment_end(self, trials, **info):
+#         self.refresh_enabled = False
+#         if self.live and self.live.is_started:
+#             self.live.stop()
+
+#     def on_experiment_start(self, trials, **info):
+#         self.refresh_enabled = True
+
+#     def get_state(self) -> Optional[Dict]:
+#         return {"trial_ids": self._trial_ids.copy()}
+
+#     def set_state(self, state: Dict) -> Optional[Dict]:
+#         self._trial_ids = state["trial_ids"]
+
+
 class myLoggerCallback(LoggerCallback):
     def __init__(
         self,
@@ -975,7 +1333,6 @@ class myLoggerCallback(LoggerCallback):
         self.console_width_plot = self.console_width - 4
         self.console_height = Console().height
         self.decoder = AnsiDecoder()
-        self.refresh_enabled = True
 
         if table_max_rows <= 0:
             table_max_rows = self.console_height // 3
@@ -1136,6 +1493,13 @@ class myLoggerCallback(LoggerCallback):
                     ).tolist()
                 else:
                     plot_list_interp = plot_list
+                if len(plot_list_interp) > 2 * self.console_width_plot:
+                    plot_list_arr = np.array(plot_list_interp)
+                    plot_list_interp = np.interp(
+                        np.arange(self.console_width_plot),
+                        np.arange(len(plot_list_arr)),
+                        plot_list_arr,
+                    ).tolist()
                 plot = self.plot_chart_fn(
                     width=self.console_width_plot,
                     height=self.console_height // 4,
@@ -1206,103 +1570,6 @@ class myLoggerCallback(LoggerCallback):
             ),
         )
         self.table_master.add_row(table_cpu)
-
-    # def on_step_begin(self, iteration, trials, **info):  ## too often
-    #     # if self.live is None:
-    #     #     self.live = Live(
-    #     #         self.table_master,
-    #     #         vertical_overflow="ellipsis",
-    #     #         auto_refresh=False,
-    #     #     )  # , screen=True : crop', 'ellipsis', 'visible', , refresh_per_second=0.2, transient=True,
-    #     #     self.live.start(refresh=True)
-
-    #     if self.refresh_enabled:
-    #         start_date = time.time()
-    #         if iteration % self.refresh_chart == 0 and self.live:
-    #             # self.logger.warning(f"myLoggerCallback - on_step_begin - iteration: {iteration}")
-    #             self.generate_table()
-    #             self.live.update(self.table_master, refresh=True)
-    #         if time.time() - start_date > 0.1:
-    #             self.refresh_chart = int(2 * self.refresh_chart)
-    #         self.last_refresh_time = time.time()
-
-    def on_trial_start(self, iteration, trials, trial, **info):
-        self._trial_ids.add(trial.trial_id)
-        if self.live is None:
-            self.live = Live(
-                self.table_master,
-                vertical_overflow="ellipsis",
-                auto_refresh=False,
-            )  # , screen=True : crop', 'ellipsis', 'visible', , refresh_per_second=0.2, transient=True,
-            self.live.start(refresh=True)
-            self.last_refresh_time = time.time()
-
-        if self.refresh_enabled:
-            if time.time() - self.last_refresh_time > self.min_refresh_time:
-                self.generate_table()
-                self.live.update(self.table_master, refresh=True)
-                self.last_refresh_time = time.time()
-
-    def append_trial_results(self, trial_id, result):
-        # logger.info(f"append_trial_results result: {result}")
-        loss = result["loss"]
-        if abs(loss) > 100 or abs(loss) < 0.001:
-            loss = f"{result['loss']:,.6e}"
-        else:
-            loss = f"{result['loss']:,.6f}"
-
-        self.trial_results.append(
-            (
-                f"{trial_id}",
-                f"{result['Trades']}",
-                f"{result['Win_Draw_Loss_Win_perc']}",
-                f"{(100*result['Avg_profit']):,.4f}",
-                f"{(result['Profit']):,.2f}",
-                f"{(result['Winrate']):,.2f}",
-                f"{result['Avg_duration']}",
-                loss,
-                f"{(result['Max_Drawdown_Acct']):,.2f}",
-                # f"{self.count_trials}",
-                f"{(result['time_total_s']):,.2f}",
-            )
-        )
-
-    def on_trial_result(self, iteration, trials, trial, result, **info):
-        self.count_trials += 1  # len(trials)
-        # print(
-        #     f"Results for trial {trial} / iteration {iteration} / count trials = {self.count_trials}"
-        # )
-        # print(f"result: {result}")
-
-        if self.print_all:
-            self.append_trial_results(self.count_trials, result)
-        elif result["loss"] < self.best_loss:
-            self.best_loss = result["loss"]
-            self.best_epoch = self.count_trials
-            self.append_trial_results(self.count_trials, result)
-
-        if self.plot_metric and len(self.plot_metric) > 0:
-            self.plot_trial_results.append(result[self.plot_metric])
-
-        if self.refresh_enabled:
-            if time.time() - self.last_refresh_time > self.min_refresh_time:
-                self.generate_table()
-                self.live.update(self.table_master, refresh=True)
-                self.last_refresh_time = time.time()
-
-    def on_experiment_end(self, trials, **info):
-        self.refresh_enabled = False
-        if self.live and self.live.is_started:
-            self.live.stop()
-
-    def on_experiment_start(self, trials, **info):
-        self.refresh_enabled = True
-
-    def get_state(self) -> Optional[Dict]:
-        return {"trial_ids": self._trial_ids.copy()}
-
-    def set_state(self, state: Dict) -> Optional[Dict]:
-        self._trial_ids = state["trial_ids"]
 
 
 class myPBarCallback(LoggerCallback):

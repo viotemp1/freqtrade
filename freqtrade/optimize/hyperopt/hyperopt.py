@@ -112,6 +112,25 @@ plot_metric_list = [
     "loss",
     "Max_Drawdown_Acct",
     "time_total_s",
+    # "count_high_memory_usage",
+]
+
+df_results_columns = [
+    "training_iteration",
+    "Trades",
+    "Win_Draw_Loss_Win_perc",
+    "Avg_profit",
+    "Profit",
+    "profit_perc",
+    "Winrate",
+    "Avg_duration",
+    "Objective",
+    "loss",
+    "Max_Drawdown_Acct",
+    # "trial_id",
+    # "done",
+    # "date",
+    "time_total_s",
 ]
 
 optunahub_samplers = [
@@ -680,10 +699,10 @@ class Hyperopt:
                 )
                 if self.ray_max_memory is None:
                     trainable_with_resources = tune.with_resources(
-                        trainable_with_parameters, {"CPU": cpus // self.config_jobs}
+                        trainable_with_parameters, {"CPU": 0.95 * cpus // self.config_jobs}
                     )
                     logger.info(
-                        f"ray resources per worker: CPU: {cpus // self.config_jobs}/{cpus}"
+                        f"ray resources per worker: CPU: {0.95 * cpus // self.config_jobs}/{cpus}"
                     )
                 else:
                     trainable_with_resources = tune.with_resources(
@@ -691,14 +710,14 @@ class Hyperopt:
                         PlacementGroupFactory(
                             [
                                 {
-                                    "CPU": 0.9 * cpus // self.config_jobs,
-                                    "memory": self.ray_max_memory / self.config_jobs,
+                                    "CPU": 0.95 * cpus / self.config_jobs,
+                                    "memory": 0.95 * self.ray_max_memory / self.config_jobs,
                                 }
                             ]
                         ),
                     )
                     logger.info(
-                        f"ray resources per worker: CPU: {0.9 * cpus // self.config_jobs}/{cpus} - MEM: {(self.ray_max_memory / self.config_jobs):,.2f}/{(self.ray_max_memory):,.2f}"
+                        f"ray resources per worker: CPU: {0.95 * cpus // self.config_jobs}/{cpus} - MEM: {(0.95 * self.ray_max_memory / self.config_jobs):,.2f}/{(self.ray_max_memory):,.2f}"
                     )
                 ray.init(
                     ignore_reinit_error=True,
@@ -897,25 +916,8 @@ class Hyperopt:
                     #     header=False,
                     # )
 
-            df_results = df_results[
-                [
-                    "training_iteration",
-                    "Trades",
-                    "Win_Draw_Loss_Win_perc",
-                    "Avg_profit",
-                    "Profit",
-                    "profit_perc",
-                    "Winrate",
-                    "Avg_duration",
-                    "Objective",
-                    "loss",
-                    "Max_Drawdown_Acct",
-                    # "trial_id",
-                    # "done",
-                    # "date",
-                    "time_total_s",
-                ]
-            ]
+            df_results = df_results[df_results_columns]
+
             df_results = df_results.rename(
                 columns={
                     "training_iteration": "Epoch",
@@ -930,11 +932,6 @@ class Hyperopt:
                     f"Best results:\n"
                     f'{tabulate(df_results, headers="keys", tablefmt="psql", showindex=False)}'  #
                 )
-                # self.current_best_epoch.config
-                # logger.info(
-                #     f"Best params:\n"
-                #     f"{json.dumps(self._get_params_details(self.current_best_epoch['tune_best_result'].config), sort_keys=False, indent=4)}"
-                # )
 
                 self.current_best_epoch["params_details"] = deepcopy(
                     self.hyperopter._get_params_details(
@@ -944,7 +941,6 @@ class Hyperopt:
                 self.current_best_epoch["params_not_optimized"] = deepcopy(
                     not_optimized
                 )
-
                 HyperoptTools.try_export_params(
                     self.config,
                     self.hyperopter.backtesting.strategy.get_strategy_name(),
@@ -1567,6 +1563,110 @@ class myLoggerCallback(LoggerCallback):
             ),
         )
         self.table_master.add_row(table_cpu)
+
+    def on_step_begin(self, iteration, trials, **info):  ## too often
+        # if self.live is None:
+        #     self.live = Live(
+        #         self.table_master,
+        #         vertical_overflow="ellipsis",
+        #         auto_refresh=False,
+        #     )  # , screen=True : crop', 'ellipsis', 'visible', , refresh_per_second=0.2, transient=True,
+        #     self.live.start(refresh=True)
+
+        # if self.refresh_enabled:
+        #     start_date = time.time()
+        #     if iteration % self.refresh_chart == 0 and self.live:
+        #         # self.logger.warning(f"myLoggerCallback - on_step_begin - iteration: {iteration}")
+        #         self.generate_table()
+        #         self.live.update(self.table_master, refresh=True)
+        #     if time.time() - start_date > 0.1:
+        #         self.refresh_chart = int(2 * self.refresh_chart)
+        #     self.last_refresh_time = time.time()
+        if (
+            self.live is not None
+            and time.time() - self.last_refresh_time > self.min_refresh_time
+        ):
+            self.generate_table()
+            self.live.update(self.table_master, refresh=True)
+            self.last_refresh_time = time.time()
+
+    def on_trial_start(self, iteration, trials, trial, **info):
+        self._trial_ids.add(trial.trial_id)
+        if self.live is None:
+            self.live = Live(
+                self.table_master,
+                vertical_overflow="ellipsis",
+                auto_refresh=False,
+            )  # , screen=True : crop', 'ellipsis', 'visible', , refresh_per_second=0.2, transient=True,
+            self.live.start(refresh=True)
+            self.last_refresh_time = time.time()
+
+        if time.time() - self.last_refresh_time > self.min_refresh_time:
+            self.generate_table()
+            self.live.update(self.table_master, refresh=True)
+            self.last_refresh_time = time.time()
+
+    def append_trial_results(self, trial_id, result):
+        # logger.info(f"append_trial_results result: {result}")
+        loss = result["loss"]
+        if abs(loss) > 100 or abs(loss) < 0.001:
+            loss = f"{result['loss']:,.6e}"
+        else:
+            loss = f"{result['loss']:,.6f}"
+
+        try:
+            self.trial_results.append(
+                (
+                    f"{trial_id}",
+                    f"{result['Trades']}",
+                    f"{result['Win_Draw_Loss_Win_perc']}",
+                    f"{(100*result['Avg_profit']):,.4f}",
+                    f"{(result['Profit']):,.2f}",
+                    f"{(result['Winrate']):,.2f}",
+                    f"{result['Avg_duration']}",
+                    loss,
+                    f"{(result['Max_Drawdown_Acct']):,.2f}",
+                    # f"{self.count_trials}",
+                    f"{(result['TTR']):,.2f}",
+                )
+            )
+        except Exception as e:
+            raise Exception (f"myLoggerCallback - append_trial_results failed {repr(e)} - result: ß{result}")
+
+    def on_trial_result(self, iteration, trials, trial, result, **info):
+        self.count_trials += 1  # len(trials)
+        # print(
+        #     f"Results for trial {trial} / iteration {iteration} / count trials = {self.count_trials}"
+        # )
+        # print(f"result: {result}")
+
+        if self.print_all:
+            self.append_trial_results(self.count_trials, result)
+        elif result["loss"] < self.best_loss:
+            self.best_loss = result["loss"]
+            self.best_epoch = self.count_trials
+            self.append_trial_results(self.count_trials, result)
+
+        if self.plot_metric and len(self.plot_metric) > 0:
+            self.plot_trial_results.append(result[self.plot_metric])
+
+        if time.time() - self.last_refresh_time > self.min_refresh_time:
+            self.generate_table()
+            self.live.update(self.table_master, refresh=True)
+            self.last_refresh_time = time.time()
+
+    def on_experiment_end(self, trials, **info):
+        if self.live and self.live.is_started:
+            self.live.stop()
+
+    # def on_experiment_start(self, trials, **info):
+    #     self.refresh_enabled = True
+
+    def get_state(self) -> Optional[Dict]:
+        return {"trial_ids": self._trial_ids.copy()}
+
+    def set_state(self, state: Dict) -> Optional[Dict]:
+        self._trial_ids = state["trial_ids"]
 
 
 class myPBarCallback(LoggerCallback):

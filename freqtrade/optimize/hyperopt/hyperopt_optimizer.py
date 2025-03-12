@@ -552,6 +552,7 @@ class HyperOptimizer:
         # logger.info(f"objective config: {config}")
         # logger.info(f"objective config_ft: {config_ft}")
         mem_available = ray.available_resources().get("memory", 0)
+        count_high_memory_usage = 0
 
         # ray.get_runtime_context().get_trial_id()
         # print(f"ray_available_resources: {ray.available_resources()}")
@@ -653,6 +654,7 @@ class HyperOptimizer:
                 raise_on_missing_output=False,
             )
         )
+
         
         if config_jobs > 0 and count_ray_finished_tasks < (2 * config_jobs)+1:
             # time.sleep(max(0, 60 * (count_ray_current_workers - 1)))
@@ -682,12 +684,14 @@ class HyperOptimizer:
             and ray_max_memory_perc > 0
             and mem_used > 100.0 * ray_max_memory_perc
         ):
-            logger.warning(f"objective paused - high memory usage {mem_used}")
             while psutil.virtual_memory().percent > 100.0 * ray_max_memory_perc:
+                count_high_memory_usage += 1
+                if count_high_memory_usage > 3:
+                    logger.warning(f"objective high memory usage {mem_used} -{count_high_memory_usage} times")
                 time.sleep(60)
-            logger.warning(
-                f"objective resumed - memory usage {psutil.virtual_memory().percent}"
-            )
+            # logger.warning(
+            #     f"objective resumed - memory usage {psutil.virtual_memory().percent}"
+            # )
 
         analyze_per_epoch = config_ft.get("analyze_per_epoch", False)
         # print(f"objective start - {os.getcwd()}")
@@ -811,6 +815,7 @@ class HyperOptimizer:
         result["runtime_s"] = int(backtest_end_time.timestamp()) - int(
             backtest_start_time.timestamp()
         )
+        result["count_high_memory_usage"] = count_high_memory_usage
         # print("objective result", result)
         # ['loss', 'params_dict', 'params_details', 'results_metrics', 'results_explanation', 'total_profit', 'runtime_s']
         # print("objective result", list(result.keys()))
@@ -849,6 +854,7 @@ class HyperOptimizer:
         trial_result = {
             "loss": result["loss"],
             "profit_perc": 100.0 * result["results_metrics"]["profit_total"],
+            "count_high_memory_usage": result["count_high_memory_usage"],
         }
         for key, value in result.items():
             if key in list(result_columns.keys()):

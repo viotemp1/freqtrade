@@ -549,6 +549,8 @@ class HyperOptimizer:
         """
 
         logger = HyperOptimizer.ray_setup_func()
+        # logger.info(f"objective config: {config}")
+        # logger.info(f"objective config_ft: {config_ft}")
         mem_available = ray.available_resources().get("memory", 0)
 
         # ray.get_runtime_context().get_trial_id()
@@ -639,7 +641,7 @@ class HyperOptimizer:
         # )
         # logger.info(f"ray actors_finished: {actors_finished} / actors: {actors}")
 
-        config_jobs = config.get("hyperopt_jobs", -1)
+        config_jobs = config_ft.get("hyperopt_jobs", -1)
 
         count_ray_finished_tasks = len(
             ray.util.state.list_tasks(
@@ -651,11 +653,15 @@ class HyperOptimizer:
                 raise_on_missing_output=False,
             )
         )
-
-        if count_ray_finished_tasks <= 2 * config_jobs:
+        
+        if config_jobs > 0 and count_ray_finished_tasks < (2 * config_jobs)+1:
             # time.sleep(max(0, 60 * (count_ray_current_workers - 1)))
             random.seed(None)
-            time.sleep(random.randint(1, 60))
+            task_delay = random.randint(1, 120)
+            # logger.info(
+            #     f"ray worker delay - count_ray_finished_tasks: {count_ray_finished_tasks} / delay: {task_delay}"
+            # )
+            time.sleep(task_delay)
 
         # logger.info(f"objective trial_resources: {ray.train.get_context().get_trial_resources()}")
 
@@ -683,7 +689,7 @@ class HyperOptimizer:
                 f"objective resumed - memory usage {psutil.virtual_memory().percent}"
             )
 
-        analyze_per_epoch = config.get("analyze_per_epoch", False)
+        analyze_per_epoch = config_ft.get("analyze_per_epoch", False)
         # print(f"objective start - {os.getcwd()}")
         logger.debug(f"objective start - {os.getcwd()}")
         if custom_trade_info is not None:

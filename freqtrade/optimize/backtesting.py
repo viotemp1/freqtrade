@@ -9,6 +9,7 @@ from collections import defaultdict
 from copy import deepcopy
 from datetime import datetime, timedelta
 from typing import Any
+import time
 
 from numpy import nan
 from pandas import DataFrame
@@ -67,6 +68,7 @@ from freqtrade.util import FtPrecise, dt_now
 from freqtrade.util.migrations import migrate_data
 from freqtrade.wallets import Wallets
 
+import psutil
 
 logger = logging.getLogger(__name__)
 

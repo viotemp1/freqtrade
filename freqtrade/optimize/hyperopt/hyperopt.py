@@ -62,6 +62,8 @@ import plotext as plt
 from progressbar import ProgressBar
 from optuna.exceptions import ExperimentalWarning
 
+os.environ['RAY_memory_monitor_refresh_ms'] = "0"
+
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=FutureWarning)
     warnings.filterwarnings("ignore", category=ExperimentalWarning)
@@ -242,7 +244,7 @@ class Hyperopt:
             self.ray_max_memory = None
 
         if self.ray_max_memory and self.ray_max_memory_perc:
-            logger.debug(
+            logger.info(
                 f"ray_max_memory: {(self.ray_max_memory):,.2f} / ray_max_memory_perc: {(100.*self.ray_max_memory_perc):,.2f}"
             )
 
@@ -689,8 +691,8 @@ class Hyperopt:
                         PlacementGroupFactory(
                             [
                                 {
-                                    "CPU": 0.95 * cpus // self.config_jobs,
-                                    "memory": 0.95
+                                    "CPU": 0.9 * cpus // self.config_jobs,
+                                    "memory": 0.9
                                     * self.ray_max_memory
                                     / self.config_jobs,
                                 }
@@ -698,7 +700,7 @@ class Hyperopt:
                         ),
                     )
                     logger.info(
-                        f"ray resources per worker: CPU: {0.95 * cpus // self.config_jobs}/{cpus} - MEM: {( 0.95 * self.ray_max_memory / self.config_jobs):,.2f}/{(self.ray_max_memory):,.2f}"
+                        f"ray resources per worker: CPU: {0.9 * cpus // self.config_jobs}/{cpus} - MEM: {( 0.9 * self.ray_max_memory / self.config_jobs):,.2f}/{(self.ray_max_memory):,.2f}"
                     )
                 ray.init(
                     ignore_reinit_error=True,

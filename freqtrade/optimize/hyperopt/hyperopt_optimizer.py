@@ -390,7 +390,7 @@ class HyperOptimizer:
                 f"({(self.max_date - self.min_date).days} days).."
             )
             # Store non-trimmed data - will be trimmed after signal generation.
-            dump(data, data_pickle_file)  # preprocessed
+            dump(preprocessed, data_pickle_file)  # preprocessed
             if self.backtesting.timeframe_detail is None:
                 self.backtesting.timeframe_detail = "5m"
             self.backtesting.load_bt_data_detail()

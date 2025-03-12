@@ -374,6 +374,7 @@ class HyperOptimizer:
         # Real trimming will happen as part of backtesting.
         return preprocessed
 
+
     def prepare_hyperopt_data(self, data_pickle_file, detail_data_pickle_file) -> None:
         HyperoptStateContainer.set_state(HyperoptState.DATALOAD)
         data, self.timerange = self.backtesting.load_bt_data()
@@ -390,7 +391,7 @@ class HyperOptimizer:
                 f"({(self.max_date - self.min_date).days} days).."
             )
             # Store non-trimmed data - will be trimmed after signal generation.
-            dump(preprocessed, data_pickle_file)  # preprocessed
+            dump(data, data_pickle_file)  # preprocessed data
             if self.backtesting.timeframe_detail is None:
                 self.backtesting.timeframe_detail = "5m"
             self.backtesting.load_bt_data_detail()

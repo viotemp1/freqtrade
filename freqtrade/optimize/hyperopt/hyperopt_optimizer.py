@@ -44,6 +44,7 @@ from freqtrade.optimize.optimize_reports import generate_strategy_stats
 from freqtrade.resolvers.hyperopt_resolver import HyperOptLossResolver
 from freqtrade.util.dry_run_wallet import get_dry_run_wallet
 from freqtrade.optimize.optimize_reports import generate_wins_draws_losses
+from freqtrade.data import history
 
 import numpy as np
 
@@ -374,7 +375,6 @@ class HyperOptimizer:
         # Real trimming will happen as part of backtesting.
         return preprocessed
 
-
     def prepare_hyperopt_data(self, data_pickle_file, detail_data_pickle_file) -> None:
         HyperoptStateContainer.set_state(HyperoptState.DATALOAD)
         data, self.timerange = self.backtesting.load_bt_data()
@@ -412,7 +412,7 @@ class HyperOptimizer:
         min_date,
         max_date,
         params_dict,
-        processed: Dict[str, DataFrame],
+        # processed: Dict[str, DataFrame],
     ) -> Dict[str, Any]:
         params_details = self._get_params_details(params_dict)
 
@@ -447,7 +447,7 @@ class HyperOptimizer:
                 min_date=min_date,
                 max_date=max_date,
                 config=self.config,
-                processed=processed,
+                # processed=processed,
                 backtest_stats=strat_stats,
             )
         return {
@@ -535,12 +535,10 @@ class HyperOptimizer:
         dimensions_ft: Dict,
         data_pickle_file_ft: str,
         detail_data_pickle_file_ft: str,
-        min_date_ft: str,
-        max_date_ft: str,
         total_epochs_ft: int,
         custom_hyperopt_ft: Any,
         _get_results_dict_ft: Any,
-        _advise_and_trim_ft: Any,
+        # _advise_and_trim_ft: Any,
         results_file_ft: Path,
         ray_max_memory_perc: float,
     ) -> Dict[str, Any]:
@@ -654,7 +652,7 @@ class HyperOptimizer:
             )
         )
 
-        if count_ray_finished_tasks <= 2*config_jobs:
+        if count_ray_finished_tasks <= 2 * config_jobs:
             # time.sleep(max(0, 60 * (count_ray_current_workers - 1)))
             random.seed(None)
             time.sleep(random.randint(1, 60))
@@ -757,18 +755,37 @@ class HyperOptimizer:
         # else:
         #     processed = data
 
-        processed = _advise_and_trim_ft(data)
-        del data
+        # processed = _advise_and_trim_ft(data)
+
+        # need to reprocess data every time to populate signals
+        preprocessed = backtesting.strategy.advise_all_indicators(data)
+
+        # Trim startup period from analyzed dataframe
+        # This only used to determine if trimming would result in an empty dataframe
+        preprocessed_tmp = trim_dataframes(
+            preprocessed, backtesting.timerange, backtesting.required_startup
+        )
+
+        if not preprocessed_tmp:
+            raise OperationalException(
+                "No data left after adjusting for startup candles."
+            )
+
+        # Use preprocessed_tmp for date generation (the trimmed dataframe).
+        # Backtesting will re-trim the dataframes after entry/exit signal generation.
+        min_date, max_date = history.get_timerange(preprocessed_tmp)
+
+        del data, preprocessed_tmp
         gc.collect()
 
         # logger.info(
         #     f"Hyperopting with data from "
-        #     f"{min_date_ft} "
-        #     f"up to {max_date_ft}"
+        #     f"{min_date} "
+        #     f"up to {max_date}"
         # )
 
         bt_results = backtesting.backtest(
-            processed=processed, start_date=min_date_ft, end_date=max_date_ft
+            processed=preprocessed, start_date=min_date, end_date=max_date
         )
         backtest_end_time = datetime.now(timezone.utc)
         bt_results.update(
@@ -780,10 +797,10 @@ class HyperOptimizer:
         result = _get_results_dict_ft(
             backtesting,
             bt_results,
-            min_date_ft,
-            max_date_ft,
+            min_date,
+            max_date,
             params_dict,
-            processed=processed,
+            # processed=preprocessed,
         )
         result["runtime_s"] = int(backtest_end_time.timestamp()) - int(
             backtest_start_time.timestamp()

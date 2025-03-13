@@ -1565,28 +1565,12 @@ class myLoggerCallback(LoggerCallback):
         self.table_master.add_row(table_cpu)
 
     def on_step_begin(self, iteration, trials, **info):  ## too often
-        # if self.live is None:
-        #     self.live = Live(
-        #         self.table_master,
-        #         vertical_overflow="ellipsis",
-        #         auto_refresh=False,
-        #     )  # , screen=True : crop', 'ellipsis', 'visible', , refresh_per_second=0.2, transient=True,
-        #     self.live.start(refresh=True)
-
-        # if self.refresh_enabled:
-        #     start_date = time.time()
-        #     if iteration % self.refresh_chart == 0 and self.live:
-        #         # self.logger.warning(f"myLoggerCallback - on_step_begin - iteration: {iteration}")
-        #         self.generate_table()
-        #         self.live.update(self.table_master, refresh=True)
-        #     if time.time() - start_date > 0.1:
-        #         self.refresh_chart = int(2 * self.refresh_chart)
-        #     self.last_refresh_time = time.time()
         if (
             self.live is not None
+            and self.table_master is not None
             and time.time() - self.last_refresh_time > self.min_refresh_time
         ):
-            self.generate_table()
+            # self.generate_table()
             self.live.update(self.table_master, refresh=True)
             self.last_refresh_time = time.time()
 

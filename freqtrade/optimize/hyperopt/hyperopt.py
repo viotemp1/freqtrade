@@ -1567,10 +1567,9 @@ class myLoggerCallback(LoggerCallback):
     def on_step_begin(self, iteration, trials, **info):  ## too often
         if (
             self.live is not None
-            and self.table_master is not None
             and time.time() - self.last_refresh_time > self.min_refresh_time
         ):
-            # self.generate_table()
+            self.generate_table()
             self.live.update(self.table_master, refresh=True)
             self.last_refresh_time = time.time()
 

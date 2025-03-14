@@ -686,7 +686,7 @@ class HyperOptimizer:
         ):
             while psutil.virtual_memory().percent > 100.0 * ray_max_memory_perc:
                 count_high_memory_usage += 1
-                if count_high_memory_usage > 3:
+                if count_high_memory_usage == 3:
                     logger.info(f"objective high memory usage {mem_used} -{count_high_memory_usage} times")
                 time.sleep(60)
             # logger.warning(

@@ -95,6 +95,7 @@ with warnings.catch_warnings():
 
 ray_results_table_max_rows = 10  # -1 - half screen
 ray_reuse_actors = False
+ray_max_memory_perc = 100. * float(os.environ.get("RAY_MAX_MEMORY_PERC", 0.9))
 
 # max_used_memory = 80  # 0 or negative to deactivate, otherwise pause worker
 
@@ -1539,7 +1540,7 @@ class myLoggerCallback(LoggerCallback):
                 self.live.console.width,
                 0,
                 int(self.live.console.width * psutil.virtual_memory().percent / 100.0),
-                color="green" if psutil.virtual_memory().percent < 90 else "red",
+                color="green" if psutil.virtual_memory().percent <= ray_max_memory_perc else "red",
                 bgcolor="black",
             ),
         )

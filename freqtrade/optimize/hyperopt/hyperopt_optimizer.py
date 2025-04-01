@@ -368,6 +368,11 @@ class HyperOptimizer:
         trimmed = trim_dataframes(
             preprocessed, self.timerange, self.backtesting.required_startup
         )
+        if not trimmed:
+            raise OperationalException(
+                "No data left after adjusting for startup candles."
+            )
+        
         self.min_date, self.max_date = get_timerange(trimmed)
         if not self.market_change:
             self.market_change = calculate_market_change(trimmed, "close")
@@ -378,6 +383,8 @@ class HyperOptimizer:
     def prepare_hyperopt_data(self, data_pickle_file, detail_data_pickle_file) -> None:
         HyperoptStateContainer.set_state(HyperoptState.DATALOAD)
         data, self.timerange = self.backtesting.load_bt_data()
+        if self.backtesting.timeframe_detail is not None:
+            self.backtesting.load_bt_data_detail()
         logger.info("Dataload complete. Calculating indicators")
 
         if not self.analyze_per_epoch:
@@ -391,17 +398,11 @@ class HyperOptimizer:
                 f"({(self.max_date - self.min_date).days} days).."
             )
             # Store non-trimmed data - will be trimmed after signal generation.
-            dump(data, data_pickle_file)  # preprocessed data
-            if self.backtesting.timeframe_detail is None:
-                self.backtesting.timeframe_detail = "5m"
-            self.backtesting.load_bt_data_detail()
+            dump(preprocessed, data_pickle_file)  # preprocessed data
             dump(self.backtesting.detail_data, detail_data_pickle_file)
             self.backtesting.detail_data = {}
         else:
             dump(data, data_pickle_file)
-            if self.backtesting.timeframe_detail is None:
-                self.backtesting.timeframe_detail = "5m"
-            self.backtesting.load_bt_data_detail()
             dump(self.backtesting.detail_data, detail_data_pickle_file)
             self.backtesting.detail_data = {}
 
@@ -768,25 +769,25 @@ class HyperOptimizer:
         # processed = _advise_and_trim_ft(data)
 
         # need to reprocess data every time to populate signals
-        preprocessed = backtesting.strategy.advise_all_indicators(data)
+        # preprocessed = backtesting.strategy.advise_all_indicators(data)
 
-        # Trim startup period from analyzed dataframe
-        # This only used to determine if trimming would result in an empty dataframe
-        preprocessed_tmp = trim_dataframes(
-            preprocessed, backtesting.timerange, backtesting.required_startup
-        )
+        # # Trim startup period from analyzed dataframe
+        # # This only used to determine if trimming would result in an empty dataframe
+        # preprocessed_tmp = trim_dataframes(
+        #     preprocessed, backtesting.timerange, backtesting.required_startup
+        # )
 
-        if not preprocessed_tmp:
-            raise OperationalException(
-                "No data left after adjusting for startup candles."
-            )
+        # if not preprocessed_tmp:
+        #     raise OperationalException(
+        #         "No data left after adjusting for startup candles."
+        #     )
 
         # Use preprocessed_tmp for date generation (the trimmed dataframe).
         # Backtesting will re-trim the dataframes after entry/exit signal generation.
-        min_date, max_date = history.get_timerange(preprocessed_tmp)
+        min_date, max_date = history.get_timerange(data) # preprocessed_tmp
 
-        del data, preprocessed_tmp
-        gc.collect()
+        # del data, preprocessed_tmp
+        # gc.collect()
 
         # logger.info(
         #     f"Hyperopting with data from "
@@ -795,8 +796,10 @@ class HyperOptimizer:
         # )
 
         bt_results = backtesting.backtest(
-            processed=preprocessed, start_date=min_date, end_date=max_date
+            processed=data, start_date=min_date, end_date=max_date # preprocessed
         )
+        del data
+        gc.collect()
         backtest_end_time = datetime.now(timezone.utc)
         bt_results.update(
             {

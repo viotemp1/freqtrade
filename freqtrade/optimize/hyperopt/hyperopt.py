@@ -62,7 +62,30 @@ import plotext as plt
 from progressbar import ProgressBar
 from optuna.exceptions import ExperimentalWarning
 
+
+def port_in_use(port):
+    try:
+        all_connections = psutil.net_connections()
+        for conn in all_connections:
+            if conn.laddr.port == port:
+                return True
+    except:  # for os x
+        pass
+    return False
+
+
+# print(port_in_use(8265))
+
+
+def find_first_free_port(port):
+    for i in range(100):
+        if not port_in_use(port + i):
+            return port + i
+    return None
+
+
 os.environ["RAY_memory_monitor_refresh_ms"] = "0"
+os.environ["AUTOSCALER_METRIC_PORT"] = str(find_first_free_port(44217))
 
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=FutureWarning)
@@ -95,7 +118,7 @@ with warnings.catch_warnings():
 
 ray_results_table_max_rows = 10  # -1 - half screen
 ray_reuse_actors = False
-ray_max_memory_perc = 100. * float(os.environ.get("RAY_MAX_MEMORY_PERC", 0.9))
+ray_max_memory_perc = 100.0 * float(os.environ.get("RAY_MAX_MEMORY_PERC", 0.9))
 
 # max_used_memory = 80  # 0 or negative to deactivate, otherwise pause worker
 
@@ -700,7 +723,8 @@ class Hyperopt:
                 )
                 if self.ray_max_memory is None:
                     trainable_with_resources = tune.with_resources(
-                        trainable_with_parameters, {"CPU": 0.95 * cpus // self.config_jobs}
+                        trainable_with_parameters,
+                        {"CPU": 0.95 * cpus // self.config_jobs},
                     )
                     logger.info(
                         f"ray resources per worker: CPU: {0.95 * cpus // self.config_jobs}/{cpus}"
@@ -712,7 +736,9 @@ class Hyperopt:
                             [
                                 {
                                     "CPU": 0.95 * cpus / self.config_jobs,
-                                    "memory": 0.95 * self.ray_max_memory / self.config_jobs,
+                                    "memory": 0.95
+                                    * self.ray_max_memory
+                                    / self.config_jobs,
                                 }
                             ]
                         ),
@@ -1540,7 +1566,11 @@ class myLoggerCallback(LoggerCallback):
                 self.live.console.width,
                 0,
                 int(self.live.console.width * psutil.virtual_memory().percent / 100.0),
-                color="green" if psutil.virtual_memory().percent <= ray_max_memory_perc else "red",
+                color=(
+                    "green"
+                    if psutil.virtual_memory().percent <= ray_max_memory_perc
+                    else "red"
+                ),
                 bgcolor="black",
             ),
         )
@@ -1615,7 +1645,9 @@ class myLoggerCallback(LoggerCallback):
                 )
             )
         except Exception as e:
-            raise Exception (f"myLoggerCallback - append_trial_results failed {repr(e)} - result: ß{result}")
+            raise Exception(
+                f"myLoggerCallback - append_trial_results failed {repr(e)} - result: ß{result}"
+            )
 
     def on_trial_result(self, iteration, trials, trial, result, **info):
         self.count_trials += 1  # len(trials)
@@ -1822,24 +1854,3 @@ class ExperimentPlateauStopper(Stopper):
                 f"last_result: {self._last_result} / best_result: {self._best_result}"
             )
         return stop_all
-
-
-def port_in_use(port):
-    try:
-        all_connections = psutil.net_connections()
-        for conn in all_connections:
-            if conn.laddr.port == port:
-                return True
-    except:  # for os x
-        pass
-    return False
-
-
-# print(port_in_use(8265))
-
-
-def find_first_free_port(port):
-    for i in range(100):
-        if not port_in_use(port + i):
-            return port + i
-    return None

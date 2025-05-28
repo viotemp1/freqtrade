@@ -363,17 +363,17 @@ def generate_trading_stats(results: DataFrame) -> dict[str, Any]:
     )
     loser_holding_min = (
         timedelta(minutes=round(losing_duration[losing_duration > 0].min()))
-        if not losing_duration.empty
+        if not losing_duration.dropna().empty
         else timedelta()
     )
     loser_holding_max = (
         timedelta(minutes=round(losing_duration.max()))
-        if not losing_duration.empty
+        if not losing_duration.dropna().empty
         else timedelta()
     )
     loser_holding_avg = (
         timedelta(minutes=round(losing_duration.mean()))
-        if not losing_duration.empty
+        if not losing_duration.dropna().empty
         else timedelta()
     )
     winstreak, loss_streak = calc_streak(results)

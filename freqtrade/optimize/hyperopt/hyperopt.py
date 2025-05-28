@@ -13,9 +13,11 @@ from multiprocessing import Manager
 from pathlib import Path
 from typing import Any
 
+import plotext as plt
 import rapidjson
 from joblib import Parallel, cpu_count
 from optuna.trial import Trial, TrialState
+from optuna.visualization._optimization_history import _get_optimization_history_info_list
 
 from freqtrade.constants import FTHYPT_FILEVERSION, LAST_BT_RESULT_FN, Config
 from freqtrade.enums import HyperoptState
@@ -317,6 +319,33 @@ class Hyperopt:
                             logger.info(f"Early stopping after {(i + 1) * jobs} epochs")
                             break
 
+            optimization_history = _get_optimization_history_info_list(
+                self.opt, None, "Objective", False
+            )[0]
+            o_history_list = optimization_history.values_info.values
+            if min(o_history_list) < 0:
+                o_history_list_new = [0 if i > 0 else i for i in o_history_list]
+            else:
+                o_history_list_new = o_history_list.copy()
+            if len(o_history_list_new) > 3:
+                try:
+                    plt.theme(theme="pro")
+                    plt.plot_size(width=plt.terminal_width(), height=plt.terminal_height() // 2)
+                    plt.yscale("log")
+                    plt.plot(o_history_list_new, label="Objective")
+                    # plt.scatter(optimization_history.best_values_info.values, label="best value")
+                    plt.title("Optimization history")
+                    plt.show()
+                except Exception:
+                    plt.theme(theme="pro")
+                    plt.plot_size(width=plt.terminal_width(), height=plt.terminal_height() // 2)
+                    plt.yscale("linear")
+                    plt.plot(o_history_list_new, label="Objective")
+                    # plt.scatter(optimization_history.best_values_info.values, label="best value")
+                    plt.title("Optimization history")
+                    plt.show()
+                    pass
+        
         except KeyboardInterrupt:
             print("User interrupted..")
 

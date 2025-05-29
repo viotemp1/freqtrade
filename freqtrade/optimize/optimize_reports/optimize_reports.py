@@ -361,21 +361,29 @@ def generate_trading_stats(results: DataFrame) -> dict[str, Any]:
         if not winning_duration.empty
         else timedelta()
     )
-    loser_holding_min = (
-        timedelta(minutes=round(losing_duration[losing_duration > 0].min()))
-        if not losing_duration.dropna().empty
-        else timedelta()
-    )
-    loser_holding_max = (
-        timedelta(minutes=round(losing_duration.max()))
-        if not losing_duration.dropna().empty
-        else timedelta()
-    )
-    loser_holding_avg = (
-        timedelta(minutes=round(losing_duration.mean()))
-        if not losing_duration.dropna().empty
-        else timedelta()
-    )
+    try:
+        loser_holding_min = (
+            timedelta(minutes=round(losing_duration[losing_duration > 0].min()))
+            if not losing_duration.dropna().empty
+            else timedelta()
+        )
+        loser_holding_max = (
+            timedelta(minutes=round(losing_duration.max()))
+            if not losing_duration.dropna().empty
+            else timedelta()
+        )
+        loser_holding_avg = (
+            timedelta(minutes=round(losing_duration.mean()))
+            if not losing_duration.dropna().empty
+            else timedelta()
+        )
+    except Exception as e:
+        # print(f"generate_trading_stats error: {e}")
+        # print(losing_duration[losing_duration > 0].min())
+        # print(losing_duration)
+        loser_holding_min = timedelta()
+        loser_holding_max = timedelta()
+        loser_holding_avg = timedelta()
     winstreak, loss_streak = calc_streak(results)
 
     return {
